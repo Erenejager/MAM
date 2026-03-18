@@ -72,42 +72,41 @@
 ## Transcription Architecture Note
 
 Transcription is generated via **Groq API** (Whisper large-v3) as a background job after import.
-- Requires `GROQ_API_KEY` in `.env`
-- Groq accepts audio/video files directly — no local audio pre-extraction required
-- Free tier with rate limits; no model download or local compute needed
+- Requires `GROQ_API_KEY` in `.env` — validated at startup, server refuses to start if missing
+- **Audio pre-extraction is mandatory** — Groq has a 25 MB file size limit. All video files must be pre-extracted to 16kHz mono OGG/Opus via ffmpeg before sending to Groq (a 1-hour video → ~5 MB). The temp audio file is deleted after transcription completes or fails.
+- Free tier with rate limits (requests/min and requests/day) — ingest queue must handle 429 responses with exponential backoff retry
+- No local model download or local compute needed
 - Transcript segments (text + start/end timestamps) stored in SQLite and indexed in OpenSearch
 
 ## Traceability
 
-*Populated during roadmap creation.*
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| IMP-01 | — | Pending |
-| IMP-02 | — | Pending |
-| IMP-03 | — | Pending |
-| META-01 | — | Pending |
-| META-02 | — | Pending |
-| META-03 | — | Pending |
-| META-04 | — | Pending |
-| BRWS-01 | — | Pending |
-| BRWS-02 | — | Pending |
-| BRWS-03 | — | Pending |
-| BRWS-04 | — | Pending |
-| PLAY-01 | — | Pending |
-| PLAY-02 | — | Pending |
-| PLAY-03 | — | Pending |
-| PLAY-04 | — | Pending |
-| SRCH-01 | — | Pending |
-| SRCH-02 | — | Pending |
-| SRCH-03 | — | Pending |
-| SRCH-04 | — | Pending |
+| IMP-01 | Phase 2 | Pending |
+| IMP-02 | Phase 2 | Pending |
+| IMP-03 | Phase 2 | Pending |
+| META-01 | Phase 2 | Pending |
+| META-02 | Phase 4 | Pending |
+| META-03 | Phase 4 | Pending |
+| META-04 | Phase 4 | Pending |
+| BRWS-01 | Phase 3 | Pending |
+| BRWS-02 | Phase 2 | Pending |
+| BRWS-03 | Phase 3 | Pending |
+| BRWS-04 | Phase 3 | Pending |
+| PLAY-01 | Phase 3 | Pending |
+| PLAY-02 | Phase 5 | Pending |
+| PLAY-03 | Phase 5 | Pending |
+| PLAY-04 | Phase 3 | Pending |
+| SRCH-01 | Phase 6 | Pending |
+| SRCH-02 | Phase 6 | Pending |
+| SRCH-03 | Phase 6 | Pending |
+| SRCH-04 | Phase 6 | Pending |
 
 **Coverage:**
 - v1 requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19 ⚠️
+- Mapped to phases: 19
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-11*
-*Last updated: 2026-03-11 after initial definition*
+*Last updated: 2026-03-11 after roadmap creation*

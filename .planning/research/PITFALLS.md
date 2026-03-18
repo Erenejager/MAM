@@ -1,8 +1,8 @@
 # Domain Pitfalls
 
-**Domain:** Local Media Asset Management (Whisper + OpenSearch + ffmpeg + React + Node.js)
-**Researched:** 2026-03-11
-**Confidence note:** HTTP range request behavior confirmed via MDN official docs. Whisper, OpenSearch, ffmpeg, and Node.js patterns drawn from training knowledge (cutoff August 2025) — flagged by confidence level per finding.
+**Domain:** Media Asset Management (Groq API + OpenSearch + ffmpeg + React + Node.js) — Hetzner server + Tailscale deployment
+**Researched:** 2026-03-18
+**Confidence note:** HTTP range request behavior confirmed via MDN official docs. OpenSearch, ffmpeg, and Node.js patterns drawn from training knowledge (cutoff August 2025) — flagged by confidence level per finding. Transcription approach updated to Groq API (Whisper large-v3 via groq-sdk).
 
 ---
 
@@ -38,60 +38,41 @@ Mistakes that cause rewrites, data corruption, or total ingest pipeline failure.
 
 ---
 
-### Pitfall 2: Whisper Blocks the Node.js Process When Invoked Synchronously
+### Pitfall 2: Awaiting Groq API Call in the Request Handler
 
-**What goes wrong:** The ingest handler calls `child_process.execSync('whisper ...')` or `spawnSync(...)` directly in the request handler. This blocks the Node.js event loop for the entire transcription duration — which can be 5–30+ minutes for a 1-hour video on CPU. Every other request (browse, play, search) hangs until transcription completes. The app appears frozen.
+**What goes wrong:** The ingest handler awaits the groq-sdk call synchronously in the request lifecycle, blocking the response until transcription completes.
 
-**Why it happens:** Developers treat Whisper like a fast utility call. It is a heavyweight ML inference process. On CPU-only hardware, Whisper can take 4–10x real-time (a 10-minute video = 40–100 minutes transcription time).
-
-**Consequences:**
-- App completely unresponsive during transcription
-- If multiple files are imported, all imports queue behind each other on the main thread
-- Server process may OOM-kill if multiple Whisper processes are spawned concurrently
-- No way to cancel an in-progress transcription
+**Why it happens:** Groq calls can take 10–60 seconds for long audio files. Awaiting in the handler delays the 202 response — the client gets no acknowledgment while the server is occupied with the Groq call.
 
 **Prevention:**
-- Always use async `spawn()` from `child_process`, never `execSync` or `spawnSync`
-- Implement a job queue (even a simple in-memory queue) that processes one Whisper job at a time
-- Expose a `/jobs` status endpoint so the frontend can poll transcription progress
-- Enforce a maximum of 1 concurrent Whisper process — running multiple on CPU will thrash memory and all will slow down
-
-**Detection (warning signs):**
-- API calls hang during a file import
-- CPU hits 100% and the entire server stops responding
-- `top`/Task Manager shows `whisper` or `python` consuming all cores with no other process getting time
+- Respond 202 immediately after file copy + SQLite record creation
+- Enqueue the Groq call as a background job via p-queue
+- Never await transcription in the request handler
 
 **Phase:** Ingest pipeline — Phase 2 or 3
 
-**Confidence:** MEDIUM — based on well-documented Node.js event loop behavior (confirmed via official docs) and known Whisper CPU performance characteristics from training data
+**Confidence:** HIGH — standard Node.js async pattern; Groq API latency is well-documented
 
 ---
 
-### Pitfall 3: Whisper OOM-Kills or Crashes on Large Files Without Audio Pre-Extraction
+### Pitfall 3: Groq 25 MB File Size Limit Not Handled
 
-**What goes wrong:** Whisper is invoked directly on a video file (`.mp4`, `.mkv`). Whisper internally uses ffmpeg to decode the audio, but it loads the entire decoded audio into RAM as float32 arrays before inference. For a 2-hour 4K video file, the in-memory audio representation can exceed 4–8 GB RAM. The OS kills the process. The ingest job disappears with no error surfaced to the user.
+**What goes wrong:** A video file is sent directly to the Groq API. Any file larger than 25 MB fails with a 413 error from Groq.
 
-**Why it happens:** Whisper's CLI accepts video files, so developers assume it handles them efficiently. It does not stream audio — it decodes fully into memory.
+**Why it happens:** Groq's Whisper endpoint has a hard 25 MB upload limit. Most video files exceed this by a significant margin.
 
 **Consequences:**
-- OOM crash with no error message visible to the user
-- Asset is left in a "processing" state permanently (orphaned job)
-- On machines with 8 GB RAM, files over ~30–60 minutes become unreliable
+- Transcription silently fails for the majority of real-world video files
+- The asset is left in a "processing" or "failed" state with no clear explanation surfaced to the user
 
 **Prevention:**
-- Pre-extract audio to a WAV or FLAC file using ffmpeg before passing to Whisper: `ffmpeg -i input.mp4 -ar 16000 -ac 1 -f wav temp_audio.wav`
-- Use 16 kHz mono WAV — Whisper's native sample rate; avoids unnecessary resampling overhead
-- Delete the temp audio file after transcription completes (or fails)
-- Consider using `whisper-base` or `whisper-small` models for long files when on memory-constrained hardware
-
-**Detection (warning signs):**
-- Jobs for files > 30 minutes silently disappear
-- System RAM spikes to 100% during transcription
-- No error in logs — process is killed before it can write one
+- ALWAYS pre-extract audio via ffmpeg before sending to Groq: `ffmpeg -i input.mp4 -ar 16000 -ac 1 -c:a libopus -b:a 12k temp.ogg`
+- A 1-hour video becomes approximately 5 MB OGG at these settings — well within the 25 MB limit
+- Delete the temp file in a `finally` block regardless of success or failure
 
 **Phase:** Ingest pipeline — Phase 2 or 3
 
-**Confidence:** MEDIUM — based on Whisper's known architecture (full decode into memory) from training data
+**Confidence:** HIGH — Groq's 25 MB file size limit is documented in their API reference
 
 ---
 
@@ -128,7 +109,7 @@ Mistakes that cause rewrites, data corruption, or total ingest pipeline failure.
 
 ### Pitfall 5: Ingest Pipeline Has No Idempotency or Failure Recovery
 
-**What goes wrong:** A file is imported, thumbnail generation starts, then Whisper crashes halfway through. The asset record is written to the database (or OpenSearch) in a half-complete state — thumbnail missing, transcript missing, status shows "processing" forever. Re-importing the same file creates a duplicate record. There is no way to retry just the failed step.
+**What goes wrong:** A file is imported, thumbnail generation starts, then the Groq API call fails halfway through. The asset record is written to the database (or OpenSearch) in a half-complete state — thumbnail missing, transcript missing, status shows "processing" forever. Re-importing the same file creates a duplicate record. There is no way to retry just the failed step.
 
 **Why it happens:** Ingest is implemented as a linear sequence of side effects with no transactional boundary and no state machine. Each step writes output without tracking which steps completed.
 
@@ -141,7 +122,7 @@ Mistakes that cause rewrites, data corruption, or total ingest pipeline failure.
 **Prevention:**
 - Model ingest as a state machine with explicit status transitions: `pending → extracting_metadata → generating_thumbnail → transcribing → indexing → complete | failed`
 - Store status per-step in the asset record (SQLite or a JSON file per asset)
-- Make each step idempotent: check if thumbnail file already exists before running ffmpeg; check if transcript already exists before running Whisper
+- Make each step idempotent: check if thumbnail file already exists before running ffmpeg; check if transcript already exists before calling Groq
 - Implement a "resume on startup" check that picks up `pending` or `failed` jobs and retries them
 - Use a content hash (MD5/SHA256) of the file as a deduplication key — reject imports of files already in the library
 
@@ -207,12 +188,12 @@ Mistakes that cause rewrites, data corruption, or total ingest pipeline failure.
 
 ### Pitfall 9: File Path Storage Creates Portability Failures
 
-**What goes wrong:** Asset records store absolute file paths (e.g., `C:\Users\agharian\Videos\interview.mp4`). The user moves their video library directory to a different drive or the app is reinstalled to a different path. Every asset link is broken. Re-linking requires editing every record in the database.
+**What goes wrong:** Asset records store absolute file paths (e.g., `/home/user/videos/interview.mp4`). The video library directory moves or the app is reinstalled to a different path. Every asset link is broken. Re-linking requires editing every record in the database.
 
 **Prevention:**
 - Store paths relative to a configurable `MEDIA_ROOT` directory (set in config, defaulting to `./media`)
 - The app resolves absolute paths at runtime by joining `MEDIA_ROOT + relative_path`
-- `MEDIA_ROOT` is stored in a config file (`.planning/config.json` or `app.config.json`), not hard-coded
+- `MEDIA_ROOT` is stored in a config file or environment variable, not hard-coded
 - On startup, validate that `MEDIA_ROOT` exists and is readable; warn the user if it is missing
 
 **Phase:** Infrastructure / storage design — Phase 1
@@ -221,38 +202,48 @@ Mistakes that cause rewrites, data corruption, or total ingest pipeline failure.
 
 ---
 
-### Pitfall 10: Whisper Model Not Downloaded at First Run, No User-Friendly Error
+### Pitfall 10: Groq API Key Missing or Invalid at Runtime
 
-**What goes wrong:** The first time a file is imported, the app invokes Whisper, which attempts to download the model (~140 MB for `base`, ~1.5 GB for `large`). This download happens silently during an apparent transcription job. On a slow connection it takes minutes. If the download fails mid-way (network interruption), Whisper may leave a corrupt partial model file and fail every future transcription with a cryptic error.
+**What goes wrong:** `GROQ_API_KEY` is not set or has expired. The first transcription job fails with a 401 error deep in the pipeline, with no clear feedback to the user that the root cause is a missing or invalid API key.
 
 **Prevention:**
-- Include a setup/initialization step that pre-downloads the Whisper model before any file is imported
-- Check for model existence at startup and warn the user if it is missing
-- Document the model download in the README / first-run experience
-- Store the model in a known location (`~/.cache/whisper/`) and verify file integrity (Whisper does this via hash check, but surface errors to the user)
+- Validate `GROQ_API_KEY` at server startup — check env var presence at minimum; optionally make a lightweight test call
+- Refuse to start the server if the key is missing
+- Show a clear error message at boot so the operator can diagnose the issue immediately
 
-**Phase:** Project setup / first-run experience — Phase 1
+**Phase:** Project setup / startup validation — Phase 1
 
-**Confidence:** MEDIUM
+**Confidence:** HIGH — standard env var validation pattern
 
 ---
 
-### Pitfall 11: CORS Misconfiguration Breaks the React Dev Server Against the API
+### Pitfall 10a: Groq Rate Limit (429) Not Handled in Job Queue
 
-**What goes wrong:** During development, the React Vite dev server runs on port 5173 and the Node.js backend runs on port 3000. The browser blocks API requests because CORS headers are missing. Developers add `Access-Control-Allow-Origin: *` as a quick fix. This works for GET requests but breaks for `POST` with JSON bodies (preflight OPTIONS requests fail), multipart file uploads, or custom headers — all of which this app uses.
+**What goes wrong:** Multiple files are imported simultaneously. Groq returns 429 Too Many Requests. The job is marked as failed permanently with no retry, even though the failure is transient.
 
 **Prevention:**
-- Use the `cors` npm package with explicit configuration: allow origin `http://localhost:5173`, methods `GET, POST, PUT, DELETE, OPTIONS`, headers `Content-Type, Authorization`
-- Handle the OPTIONS preflight method explicitly: `app.options('*', cors(corsOptions))`
-- In production (where frontend and backend are served from the same origin), CORS is not needed — design for this from the start using Vite's `proxy` config in dev
+- Implement exponential backoff retry on 429 responses: 3 attempts with delays of 2s, 4s, and 8s before marking `transcription_status='failed'`
+- Log the rate limit hit explicitly so it is visible in server logs
+- The p-queue concurrency limit (1 concurrent Groq call) reduces the likelihood of hitting rate limits for normal single-user usage
 
-**Detection (warning signs):**
-- GET requests work, but file uploads or POST requests fail with CORS errors in DevTools
-- `Access-Control-Allow-Origin` header present on GET responses but not OPTIONS
+**Phase:** Ingest pipeline — Phase 2
+
+**Confidence:** MEDIUM — standard retry pattern for rate-limited HTTP APIs
+
+---
+
+### Pitfall 11: CORS Misconfiguration in Development
+
+**What goes wrong:** On the Hetzner server, nginx serves both the frontend and proxies the backend — same origin, no CORS issue in production. CORS only applies during local development, where the Vite dev server runs on a different port than Fastify. The risk is configuring CORS too broadly (e.g., `Access-Control-Allow-Origin: *`) during development and forgetting to remove or restrict it before deploying.
+
+**Prevention:**
+- Gate CORS configuration on `NODE_ENV=development`
+- In production, rely on nginx reverse proxy — no CORS headers needed
+- Do not leave wildcard CORS in production
 
 **Phase:** Infrastructure — Phase 1
 
-**Confidence:** HIGH — standard CORS behavior for Vite + Express dev setup
+**Confidence:** HIGH
 
 ---
 
@@ -294,7 +285,7 @@ Mistakes that cause rewrites, data corruption, or total ingest pipeline failure.
 
 ### Pitfall 14: React Video Player Does Not Unload on Navigation
 
-**What goes wrong:** A video starts playing in the asset detail panel. The user clicks away to a different asset. The `<video>` element is not unmounted — it keeps downloading the file in the background, consuming bandwidth and blocking the connection to the local server. On the next asset, a second video starts downloading. After browsing 5 assets, 5 concurrent video streams are in progress.
+**What goes wrong:** A video starts playing in the asset detail panel. The user clicks away to a different asset. The `<video>` element is not unmounted — it keeps downloading the file in the background, consuming bandwidth and blocking the connection to the server. On the next asset, a second video starts downloading. After browsing 5 assets, 5 concurrent video streams are in progress.
 
 **Prevention:**
 - Always pause the `<video>` element and clear `src` (set to `""`) in the component's cleanup/unmount effect
@@ -330,16 +321,17 @@ Mistakes that cause rewrites, data corruption, or total ingest pipeline failure.
 | Storage / DB schema design | Absolute file paths + OpenSearch as primary store | Use relative paths from MEDIA_ROOT; SQLite as source of truth |
 | Video serving endpoint | Missing HTTP range request support | Use `res.sendFile()` or `express.static()`; test seeking on Day 1 |
 | File upload handler | 413 errors on large files | Use `multer` with `dest` (disk storage), not memory storage |
-| CORS setup | OPTIONS preflight fails for multipart uploads | Use `cors` package with explicit options + `app.options('*', cors(...))` |
-| Ingest pipeline | Sync Whisper call blocks event loop | Job queue, async spawn, 1 concurrent Whisper process max |
-| Ingest pipeline | Whisper OOM on large video files | Pre-extract audio to 16kHz mono WAV before passing to Whisper |
+| CORS setup | Wildcard CORS left in production | Gate CORS on `NODE_ENV=development`; nginx handles same-origin in production |
+| Ingest pipeline | Groq call awaited in request handler | Respond 202 immediately, enqueue Groq call as background job via p-queue |
+| Ingest pipeline | Groq 25 MB limit | Pre-extract audio to OGG via ffmpeg before every Groq call |
 | Ingest pipeline | Silent failures, orphaned assets | State machine for job status; idempotent per-step checks |
+| Ingest pipeline | Groq 429 rate limit | Retry with exponential backoff (3 attempts) |
 | ffmpeg thumbnails | Black frame captures | Use `thumbnail=300` filter; seek to 10% of duration as fallback |
 | OpenSearch mapping | Dynamic mapping locks in wrong types | Define explicit mapping before first document insert |
 | Search results | Full transcript returned in every query | Use `_source_excludes`; store full transcript in SQLite |
 | Custom metadata | Label used as key — breaks on rename | Use UUID as key, label as display only |
 | Video playback | Player keeps streaming after navigation | Clear `src` and pause on component unmount |
-| First run | Whisper model not pre-downloaded | Setup step to download model; validate at startup |
+| Startup | GROQ_API_KEY missing or invalid | Validate env var at startup, refuse to start if missing |
 
 ---
 
@@ -349,7 +341,7 @@ Mistakes that cause rewrites, data corruption, or total ingest pipeline failure.
 - Node.js event loop blocking: Node.js official guide "Don't Block the Event Loop" — https://nodejs.org/en/docs/guides/dont-block-the-event-loop (confirmed HIGH confidence via WebFetch)
 - Express.js performance best practices: https://expressjs.com/en/advanced/best-practice-performance.html (confirmed MEDIUM confidence via WebFetch)
 - OpenSearch mapping / Elasticsearch field types: Training knowledge (HIGH confidence — well-established behavior unchanged for many versions)
-- Whisper memory/CPU behavior: Training knowledge (MEDIUM confidence — architecture is publicly documented; verify against current Whisper release notes)
+- Groq API file size limits and rate limits: Groq API documentation (HIGH confidence — documented hard limits)
 - ffmpeg thumbnail filter: Training knowledge (MEDIUM confidence — stable ffmpeg API)
 - multer / Express body limits: Training knowledge (HIGH confidence — well-documented defaults)
 - CORS preflight behavior: Training knowledge (HIGH confidence — specified by the CORS W3C spec)

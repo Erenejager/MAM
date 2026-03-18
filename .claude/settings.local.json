@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where python3:*)",
+      "Bash(where python:*)",
+      "Read(//c/Users/agharian/.claude/skills/ui-ux-pro-max/scripts//**)",
+      "Bash(\"/c/Users/agharian/AppData/Local/Programs/Python/Python313/python.exe\" \"C:/Users/agharian/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"media asset management video library dark professional dashboard\" --design-system --persist -p \"MAM\" -f markdown 2>&1)",
+      "Bash(\"/c/Users/agharian/AppData/Local/Programs/Python/Python313/python.exe\" \"C:/Users/agharian/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"media library grid card thumbnail video player\" --domain ux -n 5 2>&1)",
+      "Bash(\"/c/Users/agharian/AppData/Local/Programs/Python/Python313/python.exe\" \"C:/Users/agharian/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"drag drop upload file dashboard sidebar panel\" --domain ux -n 8 2>&1)",
+      "Bash(cmd /c \"git add .planning/ design-system/ .claude/ && git status\")",
+      "Bash(git add:*)"
+    ]
+  }
+}

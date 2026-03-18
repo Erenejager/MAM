@@ -1,7 +1,7 @@
 # Feature Landscape
 
 **Domain:** Personal / single-user Media Asset Management (MAM) — local video library
-**Researched:** 2026-03-11
+**Researched:** 2026-03-18
 **Confidence note:** Research conducted from training data (cutoff August 2025). WebSearch, WebFetch, and Bash tools were unavailable. Competitive analysis draws on direct knowledge of Adobe Bridge (CC 2024), Kyno 2.x, Hedge 23/24, Silverstack Lab 7, DaVinci Resolve media page, Mochi 1.x, and self-hosted tools (Jellyfin, Immich, Dim). Confidence is noted per section.
 
 ---
@@ -34,7 +34,7 @@ Features that distinguish a MAM from a plain file system or basic media player. 
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Auto-transcription (local Whisper) | Full-text search over spoken word; no other personal MAM does this offline without an API | High | Background job post-import; CPU-bound; progress indicator essential; WebSocket or polling for status |
+| Auto-transcription via Groq API (Whisper large-v3) | Auto-transcription via Groq API (Whisper large-v3). Full-text search over spoken word. Fast cloud inference, no local compute required. | High | Background job post-import; async HTTP via groq-sdk; progress indicator essential; WebSocket or polling for status |
 | Transcript-in-search results | Surfacing the exact sentence where a keyword was spoken (with timestamp) vs just "this video mentions X" | Medium | Requires storing transcript segments with timestamps in OpenSearch; snippet highlighting |
 | Jump-to-transcript-moment | Click a transcript line and the video player seeks to that timecode | Medium | Requires synchronized player + transcript panel; high delight feature |
 | Custom metadata fields (global schema) | Power users want project codes, shoot dates, subject matter fields beyond title/description/tags | Medium | Schema-defined fields applied to all assets; stored in DB; surfaced in search |
@@ -44,9 +44,9 @@ Features that distinguish a MAM from a plain file system or basic media player. 
 | Transcript viewer panel | Side-by-side video player + scrolling transcript with timecode markers | Medium | High differentiation vs competitors; pairs with jump-to-moment |
 | Waveform / thumbnail strip scrubber | Hover-scrub thumbnail strip or audio waveform in the card view | High | Nice polish; Kyno and Silverstack do this; high effort for moderate gain in v1 |
 | Configurable watch folder | Auto-import files dropped into a designated folder on disk | Medium | Useful for production pipelines; Hedge-style ingest workflow |
-| Import progress with job queue | Visual job queue showing transcription and indexing status per asset | Medium | Important for trust when Whisper is running a 30-min video in background |
+| Import progress with job queue | Visual job queue showing transcription and indexing status per asset | Medium | Important for trust when a Groq transcription job is running in background |
 
-**Confidence:** HIGH for features drawn from direct product knowledge. The local-Whisper + transcript-search combination is a genuine differentiator with no direct equivalent in the personal MAM market as of mid-2025.
+**Confidence:** HIGH for features drawn from direct product knowledge. The Groq API transcription + transcript-search combination is a genuine differentiator with no direct equivalent in the personal MAM market as of mid-2025.
 
 ---
 
@@ -63,7 +63,7 @@ Features to deliberately NOT build in v1. Each has a reason and an alternative.
 | Facial / object recognition | GPU inference, expensive models, privacy concerns, significant integration complexity | Auto-transcription already covers the high-value AI feature; don't over-extend ML scope |
 | Export / transcode | FFmpeg-based transcode pipeline is a large separate concern; adds job queue complexity | Expose the source file path; let users transcode with dedicated tools |
 | Browser-based file system access | Browser File System API has inconsistent support and security restrictions | Backend node server manages all file I/O; frontend is a client to the local API |
-| Batch AI metadata suggestions | LLM-based auto-titling/tagging is interesting but scope-creep for v1; Whisper transcript is the AI anchor | Let transcription surface keywords; user tags manually from that context |
+| Batch AI metadata suggestions | LLM-based auto-titling/tagging is interesting but scope-creep for v1; Groq transcript is the AI anchor | Let transcription surface keywords; user tags manually from that context |
 | Inline subtitle burn-in / SRT export | Useful eventually, but requires FFmpeg integration and format decisions | Store transcript internally; SRT export can be phase 2 |
 | Mobile / responsive layout | Single-user desktop browser tool; mobile optimization wastes significant layout effort | Fix layout at desktop viewport; don't build responsive breakpoints in v1 |
 
@@ -77,7 +77,7 @@ Features to deliberately NOT build in v1. Each has a reason and an alternative.
 File Import
   → Auto-extract technical metadata (FFprobe runs on import)
   → Thumbnail generation (FFmpeg runs on import)
-  → Transcription job queued (Whisper background job)
+  → Groq API transcription job (background)
       → OpenSearch indexing of transcript segments
           → Transcript-in-search results
               → Jump-to-transcript-moment (requires player + indexed segments)
@@ -92,7 +92,7 @@ Tag system
 
 Full-text search (OpenSearch)
   → Requires: title/description/tags indexed
-  → Requires: transcript segments indexed (after Whisper job)
+  → Requires: transcript segments indexed (after Groq transcription job)
   → Enables: sort + filter controls on results
   → Enables: transcript snippet highlighting in results
 
@@ -101,7 +101,7 @@ Video playback (inline)
   → Requires: browser codec support for source file format
 
 Import job queue visibility
-  → Requires: background job system (Whisper, FFprobe, FFmpeg)
+  → Requires: background job system (Groq API, FFprobe, FFmpeg)
   → Enables: per-asset progress state in UI
 ```
 
@@ -117,9 +117,9 @@ Based on the PROJECT.md active requirements and the feature analysis above, prio
 3. Editable metadata: title, description, tags (multi-value)
 4. Inline video playback (HTML5)
 5. OpenSearch indexing + full-text search (title, description, tags)
-6. Background transcription with Whisper + transcript segment indexing
+6. Background transcription with Groq API + transcript segment indexing
 7. Transcript viewer panel with jump-to-moment
-8. Import job queue progress indicator (Whisper status per asset)
+8. Import job queue progress indicator (Groq transcription status per asset)
 9. Custom global metadata field schema
 
 **Build second (high-value differentiators, after core is stable):**
@@ -132,7 +132,7 @@ Based on the PROJECT.md active requirements and the feature analysis above, prio
 - Waveform scrubber / hover-scrub thumbnail strip (high effort, low priority)
 - SRT / VTT export
 - Collections / smart folders
-- Any AI feature beyond Whisper transcription
+- Any AI feature beyond Groq transcription
 
 ---
 
@@ -150,7 +150,7 @@ These observations are from training data (cutoff August 2025). Confidence: MEDI
 | **Immich** | Excellent self-hosted photo/video with ML tagging | Photo-first; no transcript; strong UI reference for card grids |
 | **DaVinci Resolve (Media page)** | Excellent technical metadata, bins, smart bins | NLE-centric; not standalone; requires project structure |
 
-**Key gap this project fills:** No personal/prosumer tool combines local offline video browsing + auto-transcription (no API cost, privacy-preserving) + full-text search over spoken content. This is the genuine competitive moat.
+**Key gap this project fills:** No personal/prosumer tool combines local offline video browsing + auto-transcription via Groq API (Whisper large-v3) with full-text search over spoken content. This is the genuine competitive moat.
 
 ---
 

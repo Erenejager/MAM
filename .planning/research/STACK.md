@@ -2,6 +2,7 @@
 
 **Project:** MAM — Media Asset Management
 **Researched:** 2026-03-11
+**Updated:** 2026-03-18 — switched transcription from local whisper.cpp to Groq API (Whisper large-v3); removed BullMQ/Redis; deployment target is Hetzner server + Tailscale.
 **Confidence Note:** All external research tools (WebSearch, WebFetch, Bash, Context7) were unavailable during this research session. All version numbers and recommendations are sourced from training knowledge with a cutoff of August 2025. VERIFY ALL VERSIONS against npm/official docs before pinning in package.json.
 
 ---
@@ -102,28 +103,27 @@
 
 ---
 
-### Transcription (Whisper)
+### Transcription (Groq API)
 
 | Technology | Version | Purpose | Why |
 |------------|---------|---------|-----|
-| whisper.cpp (via child_process) | latest binary | Local Whisper inference | No Python runtime required in production. `whisper.cpp` is a C++ port of OpenAI Whisper — significantly faster on CPU than the Python `openai-whisper` package. The Node.js backend spawns it as a child process and captures stdout (JSON or SRT output). |
+| groq-sdk | latest | Cloud transcription via Whisper large-v3 | No local model, no CPU compute, fast (cloud GPU), simple async HTTP call. Official Groq Node.js SDK. |
 
 **Integration pattern:**
 ```
 Node.js backend
-  → spawns: whisper.cpp CLI binary
-  → args: --model ggml-base.en.bin --output-json <audio_file>
-  → reads: stdout JSON with segments [{start, end, text}]
-  → writes: transcript JSON to SQLite + OpenSearch
+  → ffmpeg extracts 16kHz mono OGG from video (temp file)
+  → POST audio to Groq API via groq-sdk
+  → parse response: segments [{start, end, text}]
+  → write transcript JSON to SQLite + OpenSearch
+  → delete temp OGG file (finally block)
 ```
 
-**Alternative considered:** `openai-whisper` Python package — requires Python runtime, slower on CPU (PyTorch overhead), but has better model availability and newer model support. Use if `whisper.cpp` proves difficult to compile or package on the deployment machine.
+**Key constraint:** Groq has a 25 MB file size limit — audio pre-extraction is MANDATORY. Do not send raw video files to the API.
 
-**Alternative considered:** `nodejs-whisper` npm package — a thin wrapper around `whisper.cpp`. Simplifies the child_process plumbing. Evaluate this before writing raw spawn code; may save implementation time.
+**Rate limits:** Free tier has requests/min and requests/day limits. Handle HTTP 429 responses with exponential backoff before retrying.
 
-**Audio extraction step:** Videos must be converted to WAV/FLAC before passing to Whisper. Use `fluent-ffmpeg` to extract audio as a pre-step.
-
-**Confidence:** MEDIUM — `whisper.cpp` was the dominant CPU-efficient local Whisper option in mid-2025. The Node.js integration via `child_process` or `nodejs-whisper` wrapper is a verified community pattern.
+**Confidence:** HIGH — straightforward HTTP API, official SDK, no local dependencies or compilation required.
 
 ---
 
@@ -131,13 +131,14 @@ Node.js backend
 
 | Technology | Version | Purpose | Why |
 |------------|---------|---------|-----|
-| fluent-ffmpeg | 2.x | Thumbnail extraction + audio extraction for Whisper | Node.js fluent API wrapper around the `ffmpeg` CLI. Handles screenshot capture (thumbnail at N seconds), audio extraction for Whisper, and metadata probing. |
+| fluent-ffmpeg | 2.x | Thumbnail extraction + audio extraction for Groq transcription | Node.js fluent API wrapper around the `ffmpeg` CLI. Handles screenshot capture (thumbnail at N seconds), audio extraction for Groq, and metadata probing. |
 | ffprobe (via fluent-ffmpeg) | bundled with ffmpeg | Duration, codec, resolution extraction | `fluentFfmpeg.ffprobe()` returns full stream metadata. No separate library needed. |
-| @ffmpeg-installer/ffmpeg | latest | Bundles platform FFmpeg binary | Provides a pre-compiled `ffmpeg` binary for the current OS, so the app does not depend on a system-installed `ffmpeg`. Important for portable deployment. |
+
+**FFmpeg installation:** Use system ffmpeg installed via `apt-get install ffmpeg` on the server. Do NOT use the `@ffmpeg-installer/ffmpeg` npm package — it is unnecessary on a server where ffmpeg is managed by the OS package manager.
 
 **Thumbnail strategy:** Capture at 10% of video duration (avoids black frames at start). Save as JPEG (smaller than PNG) at 640px width. Serve via a static `/thumbnails/:asset_id.jpg` route.
 
-**Confidence:** MEDIUM — fluent-ffmpeg 2.x and @ffmpeg-installer/ffmpeg were the standard pairing in mid-2025. These packages have been stable for several years.
+**Confidence:** MEDIUM — fluent-ffmpeg 2.x was the standard Node.js wrapper in mid-2025. The package has been stable for several years.
 
 ---
 
@@ -145,15 +146,13 @@ Node.js backend
 
 | Technology | Version | Purpose | Why |
 |------------|---------|---------|-----|
-| BullMQ | 5.x | Background job queue for transcription + thumbnail jobs | Redis-backed, durable across restarts. Jobs persist if the server crashes mid-transcription. Supports job progress events (useful for progress indicators in the UI). |
+| p-queue | 8.x | Concurrency-limited async job queue | In-memory queue for controlling concurrent Groq API calls. Groq calls are fast async HTTP (not CPU-bound), so durability across restarts is not a concern. Concurrency limit of 3–5 is appropriate for Groq rate limits, not CPU protection. No Redis or external infrastructure required. |
 
-**Alternative considered:** Simple in-memory queue (custom) — acceptable if transcription jobs are short and crash recovery is not a concern. For Whisper on CPU, a 30-minute video can take 5–10 minutes. BullMQ is the safer choice for long-running jobs.
+**Rationale for choosing p-queue over BullMQ:** BullMQ's justification was "Whisper jobs take 30+ minutes (CPU-bound)" — that constraint no longer exists with Groq. Groq transcription is a fast async HTTP call. The only concurrency concern is Groq's rate limits, which p-queue handles cleanly. Redis adds infrastructure overhead with no benefit in this context.
 
-**Alternative considered:** `p-queue` (in-memory) — no persistence, but simpler setup. Viable if you explicitly accept "re-queue on restart" as a product behavior.
+**Job status tracking:** Use a `transcription_jobs` table in SQLite (asset_id, status, error, created_at, completed_at) to provide job status to the UI without needing a persistent queue backend.
 
-**Dependency note:** BullMQ requires a running Redis instance. This adds infrastructure overhead. If Redis is unacceptable, use `p-queue` + SQLite job status table as a lightweight alternative.
-
-**Confidence:** MEDIUM — BullMQ 5.x was current in mid-2025. The Redis dependency is a real constraint worth flagging — the team should decide: Redis (more robust) vs. in-memory + SQLite status (simpler but less durable).
+**Confidence:** HIGH — p-queue is the clear choice for rate-limited async HTTP calls. Simple, lightweight, no infrastructure dependencies.
 
 ---
 
@@ -187,10 +186,8 @@ Node.js backend
 | Backend | Fastify 4.x | Express 5.x | Express lacks built-in schema validation; async error handling still bolted on |
 | Video Player | Video.js 8.x | react-player 2.x | react-player adds streaming-service adapters with no benefit in local-file context |
 | Video Player | Video.js 8.x | Native `<video>` | No transcript timestamp sync, no accessible controls, no HLS |
-| Transcription | whisper.cpp | openai-whisper (Python) | Python runtime overhead, slower CPU inference; use as fallback if whisper.cpp won't compile |
+| Transcription | Groq API | local whisper.cpp | Server deployment, no local GPU/CPU, fast cloud inference |
 | DB | SQLite + better-sqlite3 | Postgres | No multi-user concurrency; infrastructure overhead not justified |
-| Job Queue | BullMQ | p-queue (in-memory) | p-queue loses jobs on crash; Whisper jobs can take minutes |
-| Job Queue | BullMQ | Bull (v4) | BullMQ is Bull's successor, written for Redis 5+, better TypeScript support |
 | Drag-and-drop | react-dropzone | @dnd-kit | @dnd-kit is for list reordering; react-dropzone is purpose-built for file-drop zones |
 
 ---
@@ -211,8 +208,9 @@ npm install @tanstack/react-query axios
 npm install fastify @fastify/multipart @fastify/static @fastify/cors
 npm install better-sqlite3
 npm install @opensearch-project/opensearch
-npm install fluent-ffmpeg @ffmpeg-installer/ffmpeg
-npm install bullmq ioredis
+npm install fluent-ffmpeg
+npm install groq-sdk
+npm install p-queue
 
 # Dev / Testing
 npm install -D vitest @testing-library/react @testing-library/jest-dom supertest
@@ -220,10 +218,8 @@ npm install -D @types/node @types/better-sqlite3 @types/fluent-ffmpeg
 ```
 
 ```bash
-# whisper.cpp — build or download pre-compiled binary separately
-# See: https://github.com/ggerganov/whisper.cpp
-# Download ggml model: models/ggml-base.en.bin (for English-only, ~150MB)
-# For multilingual: models/ggml-base.bin (~150MB)
+# ffmpeg — install via OS package manager on the server, NOT via npm
+apt-get install ffmpeg
 ```
 
 ---
@@ -238,7 +234,7 @@ The following versions MUST be verified against npm/official docs before pinning
 | vite | 5.x or 6.x | https://www.npmjs.com/package/vite |
 | fastify | 4.x or 5.x | https://www.npmjs.com/package/fastify |
 | @opensearch-project/opensearch | 2.x or 3.x | https://www.npmjs.com/package/@opensearch-project/opensearch |
-| bullmq | 5.x | https://www.npmjs.com/package/bullmq |
+| groq-sdk | latest | https://www.npmjs.com/package/groq-sdk |
 | video.js | 8.x | https://www.npmjs.com/package/video.js |
 | @tanstack/react-query | 5.x | https://www.npmjs.com/package/@tanstack/react-query |
 | tailwindcss | 3.x or 4.x | https://www.npmjs.com/package/tailwindcss |
@@ -253,9 +249,10 @@ The following versions MUST be verified against npm/official docs before pinning
 All recommendations are based on training knowledge (cutoff: August 2025). No external sources could be consulted during this research session due to tool permission restrictions. Confidence levels reflect this limitation.
 
 - Official OpenSearch JS Client: https://github.com/opensearch-project/opensearch-js
-- whisper.cpp repository: https://github.com/ggerganov/whisper.cpp
+- Groq API documentation: https://console.groq.com/docs/speech-text
+- groq-sdk npm package: https://www.npmjs.com/package/groq-sdk
 - Fastify documentation: https://fastify.dev/docs/latest/
 - Video.js documentation: https://videojs.com/
-- BullMQ documentation: https://docs.bullmq.io/
+- p-queue: https://github.com/sindresorhus/p-queue
 - fluent-ffmpeg: https://github.com/fluent-ffmpeg/node-fluent-ffmpeg
 - TanStack Query v5: https://tanstack.com/query/v5/docs

@@ -1,8 +1,9 @@
 # Architecture Patterns
 
-**Domain:** Local Media Asset Management (single-user, local filesystem, local inference)
+**Domain:** Local Media Asset Management (single-user, Hetzner server + Tailscale, local filesystem)
 **Researched:** 2026-03-11
-**Confidence note:** Web/search tools unavailable in this environment. Findings are based on established patterns for Node.js media pipelines, ffmpeg/ffprobe tooling, Whisper job queues, and OpenSearch indexing. Confidence levels reflect architectural stability of each domain.
+**Updated:** 2026-03-18 — deployment target revised to Hetzner server accessed via Tailscale; Whisper CLI replaced with Groq API (Whisper large-v3 via HTTPS).
+**Confidence note:** Web/search tools unavailable in this environment. Findings are based on established patterns for Node.js media pipelines, ffmpeg/ffprobe tooling, Groq API job queues, and OpenSearch indexing. Confidence levels reflect architectural stability of each domain.
 
 ---
 
@@ -34,15 +35,15 @@
 ┌──────────────┐    ┌────────────────────────────────────────┐
 │   SQLite     │    │   Job Queue (in-process or Bull/BullMQ)│
 │  (metadata)  │    │   - ingest jobs: ffprobe → thumb →     │
-│              │    │     Whisper → OpenSearch index          │
+│              │    │     Groq API → OpenSearch index         │
 └──────────────┘    └────────────────┬───────────────────────┘
                                      │
               ┌──────────────────────┼──────────────────────┐
               ▼                      ▼                       ▼
        ┌─────────────┐      ┌──────────────┐      ┌─────────────────┐
-       │ ffprobe     │      │ ffmpeg       │      │ Whisper CLI     │
+       │ ffprobe     │      │ ffmpeg       │      │ Groq API        │
        │ (metadata   │      │ (thumbnail   │      │ (transcription  │
-       │  extraction)│      │  generation) │      │  background job)│
+       │  extraction)│      │  generation) │      │  HTTPS call)    │
        └─────────────┘      └──────────────┘      └─────────────────┘
                                                            │
                                                   ┌────────▼────────┐
@@ -52,10 +53,10 @@
                                                   └─────────────────┘
 
        ┌──────────────────────────────────────────────────────────┐
-       │   Local Filesystem                                        │
-       │   /videos/                — original video files         │
-       │   /thumbnails/            — generated JPEG thumbnails    │
-       │   /transcripts/           — Whisper output JSON/SRT      │
+       │   Server Filesystem (Hetzner, /mnt/mam/)                  │
+       │   /mnt/mam/videos/       — original video files          │
+       │   /mnt/mam/thumbnails/   — generated JPEG thumbnails     │
+       │   /mnt/mam/transcripts/  — Groq API output JSON          │
        └──────────────────────────────────────────────────────────┘
 ```
 
@@ -68,14 +69,14 @@
 | React Frontend | UI rendering, user input, search queries, video playback | API Server (HTTP REST) |
 | API Server | Route handling, orchestrates pipeline, serves streams | SQLite, Job Queue, OpenSearch, Filesystem |
 | SQLite | Persistent metadata store (assets, tags, custom fields) | API Server only |
-| Job Queue | Async background job execution, job state tracking | ffprobe, ffmpeg, Whisper CLI, OpenSearch, SQLite |
+| Job Queue | Async background job execution, job state tracking | ffprobe, ffmpeg, Groq API, OpenSearch, SQLite |
 | ffprobe | Technical metadata extraction (duration, codec, resolution, bitrate) | Job Queue (spawned as child process) |
 | ffmpeg | Thumbnail frame extraction at seek position | Job Queue (spawned as child process) |
-| Whisper CLI | Audio transcription to text (runs on CPU, slow) | Job Queue (spawned as child process) |
+| Groq API | Audio transcription to text via HTTPS (Whisper large-v3, remote) | Job Queue (async HTTP call via groq-sdk) |
 | OpenSearch | Full-text search index (title, description, tags, transcript) | API Server (search queries), Job Queue (indexing) |
 | Local Filesystem | Durable storage for video, thumbnail, transcript files | API Server (streaming), Job Queue (read/write) |
 
-**Hard rule:** The frontend never touches the filesystem, Whisper, or OpenSearch directly. All access is mediated by the API server.
+**Hard rule:** The frontend never touches the filesystem, Groq API, or OpenSearch directly. All access is mediated by the API server.
 
 ---
 
@@ -89,7 +90,7 @@ User drops file(s) onto UI
         ▼
 POST /assets/ingest
   - API validates file extension
-  - Copies/moves file to /videos/{uuid}.{ext}
+  - Copies/moves file to /mnt/mam/videos/{uuid}.{ext}
   - Creates SQLite record: status="ingesting", filepath, original_filename, size
   - Returns asset ID immediately (202 Accepted)
   - Enqueues ingest job with asset ID
@@ -106,16 +107,18 @@ Job Queue picks up ingest job
         ├──► Stage 2: Thumbnail (ffmpeg)
         │     - Spawns: ffmpeg -ss {seek_pos} -i <filepath> -frames:v 1 -q:v 2 <thumb_path>
         │     - seek_pos = MIN(5s, duration * 0.1) — avoids black frames at 0s
-        │     - Saves to /thumbnails/{uuid}.jpg
+        │     - Saves to /mnt/mam/thumbnails/{uuid}.jpg
         │     - Writes thumbnail_path to SQLite
         │     - On failure: mark thumbnail_status="failed", continue
         │
-        ├──► Stage 3: Whisper Transcription (background, long-running)
-        │     - Spawns: whisper <filepath> --model base --output_format json --output_dir /transcripts/
-        │     - OR: node whisper wrapper via openai-whisper npm package
-        │     - Saves /transcripts/{uuid}.json  (contains segments with timestamps)
-        │     - Writes transcript_path + transcript_text to SQLite
-        │     - On failure: mark transcription_status="failed", continue
+        ├──► Stage 3: Groq Transcription (background, async HTTP)
+        │     - Spawns ffmpeg to extract 16kHz mono OGG audio to a temp file
+        │     - POSTs temp audio file to Groq API (Whisper large-v3) via HTTPS using groq-sdk
+        │     - Parses response segments: [{start, end, text}]
+        │     - Writes {uuid}.json to /mnt/mam/transcripts/
+        │     - DELETEs temp audio file (in finally block)
+        │     - UPDATE assets SET transcript_text, transcript_path, transcription_status='complete'
+        │     - On fail (incl. 429 rate limit with retry): transcription_status='failed', continue
         │
         └──► Stage 4: OpenSearch Indexing
               - Reads assembled record from SQLite (metadata + transcript text)
@@ -129,8 +132,8 @@ Frontend polls GET /assets/:id for status changes (or SSE/WebSocket for push upd
 
 **Key design decisions in the ingest flow:**
 
-1. **File is saved before pipeline runs** — user never waits for ffprobe/Whisper to complete before the upload is "done." The asset exists in the system immediately.
-2. **Each stage is independent** — a Whisper failure does not roll back the thumbnail. Partial success is better than full failure.
+1. **File is saved before pipeline runs** — user never waits for ffprobe/Groq to complete before the upload is "done." The asset exists in the system immediately.
+2. **Each stage is independent** — a Groq API failure does not roll back the thumbnail. Partial success is better than full failure.
 3. **SQLite is the source of truth** — OpenSearch is a derived index. If it goes down or gets out of sync, it can be reindexed from SQLite + transcript files.
 4. **Status fields per stage** — `metadata_status`, `thumbnail_status`, `transcription_status`, `search_index_status` allow the UI to show granular progress rather than a binary loading spinner.
 
@@ -160,7 +163,7 @@ Frontend polls GET /assets/:id for status changes (or SSE/WebSocket for push upd
 CREATE TABLE assets (
   id TEXT PRIMARY KEY,              -- UUID
   original_filename TEXT NOT NULL,
-  filepath TEXT NOT NULL,           -- absolute path on disk
+  filepath TEXT NOT NULL,           -- relative to STORAGE_ROOT, never absolute
   file_size INTEGER,
   status TEXT DEFAULT 'ingesting',  -- ingesting | ready | error
 
@@ -211,13 +214,13 @@ CREATE TABLE asset_custom_values (
 ### File Storage: Local Filesystem with Configurable Root
 
 ```
-{STORAGE_ROOT}/
+{STORAGE_ROOT}/        -- e.g. /mnt/mam/ on the Hetzner server
   videos/         -- original files, never mutated after ingest
   thumbnails/     -- {asset_id}.jpg
-  transcripts/    -- {asset_id}.json (Whisper output)
+  transcripts/    -- {asset_id}.json (Groq API output)
 ```
 
-`STORAGE_ROOT` is set via environment variable with a sensible default (e.g., `~/.mam/storage`). Never hardcode.
+`STORAGE_ROOT` is set via environment variable with a sensible default (e.g., `/mnt/mam`). Never hardcode.
 
 ### Search: OpenSearch Index Schema
 
@@ -260,7 +263,7 @@ This is straightforward to implement in Express/Fastify using `fs.createReadStre
 
 ---
 
-## Whisper as Background Job
+## Groq API as Background Job
 
 ### Job Queue Selection
 
@@ -272,33 +275,35 @@ This is straightforward to implement in Express/Fastify using `fs.createReadStre
 
 **Recommendation: `p-queue` (in-process) for MVP, designed to swap to BullMQ later**
 
-Rationale: Adding Redis as a dependency for a single-user local app is unnecessary overhead. `p-queue` gives concurrency control (limit Whisper to 1 concurrent job to avoid CPU thrashing) with zero infrastructure. The tradeoff is that in-flight jobs are lost on server restart — acceptable for MVP since the user can re-trigger transcription.
+Rationale: Adding Redis as a dependency for a single-user local app is unnecessary overhead. `p-queue` gives concurrency control with zero infrastructure. The tradeoff is that in-flight jobs are lost on server restart — acceptable for MVP since the user can re-trigger transcription.
 
 ```javascript
-// Whisper job concurrency: 1 (CPU-bound, single model load)
+// Groq transcription concurrency: 3-5 (network I/O-bound, not CPU-bound; respect rate limits)
 // ffprobe/thumbnail concurrency: 4 (fast, I/O-bound)
-const whisperQueue = new PQueue({ concurrency: 1 });
+const groqQueue = new PQueue({ concurrency: 3 });
 const mediaProcessingQueue = new PQueue({ concurrency: 4 });
 ```
 
-### Whisper Invocation Pattern
+### Groq API Invocation Pattern
 
-Whisper is called as a CLI child process. Two viable approaches:
+Groq transcription is an async HTTP call via `groq-sdk` — no child process is spawned for the transcription step itself. ffmpeg is still spawned to extract a 16kHz mono OGG audio file to a temp path before the API call.
 
-**Option A: Shell out to `whisper` CLI directly (recommended)**
 ```javascript
-import { spawn } from 'child_process';
-// whisper <filepath> --model base --output_format json --output_dir <dir> --language auto
+import Groq from 'groq-sdk';
+import { createReadStream } from 'fs';
+
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+// Extract audio with ffmpeg first, then:
+const transcription = await groq.audio.transcriptions.create({
+  file: createReadStream(tempAudioPath),
+  model: 'whisper-large-v3',
+  response_format: 'verbose_json',  // returns segments with {start, end, text}
+});
+// tempAudioPath deleted in finally block regardless of success/failure
 ```
-- Requires `whisper` in PATH (pip-installed globally or in venv)
-- Model: `base` for CPU — good accuracy/speed tradeoff
-- Output: JSON file with segments (timestamps + text) + plain TXT
 
-**Option B: `nodejs-whisper` npm package**
-- Wraps the same CLI, adds a Node.js API
-- Less control over arguments; adds an npm dependency on top of the Python install
-
-**Use Option A** — direct CLI invocation is more transparent, easier to debug, and the path forward if the user wants to switch to `whisper.cpp` (C++ port, significantly faster on CPU).
+**Handle 429 rate limit responses with exponential backoff retry.** The `groq-sdk` may surface these as errors; implement a retry wrapper with jitter before re-enqueuing or retrying in-place.
 
 ### Job Status Tracking
 
@@ -328,7 +333,7 @@ Frontend polls `GET /assets/:id` every 3-5 seconds while `status !== 'ready'`. A
 
 **What:** Each pipeline stage (ffprobe, thumbnail, transcription, indexing) writes its own status field and can fail independently.
 **When:** During ingest job execution.
-**Why:** Whisper can take minutes. If it fails, the asset should still be browsable and playable. Users should see what succeeded and what's pending.
+**Why:** Groq API calls can fail or be rate-limited. If transcription fails, the asset should still be browsable and playable. Users should see what succeeded and what's pending.
 
 ### Pattern 3: UUID for Asset Identity
 
@@ -352,10 +357,10 @@ Frontend polls `GET /assets/:id` every 3-5 seconds while `status !== 'ready'`. A
 **Why bad:** OpenSearch is an inverted index — not designed for relational data or transactional updates. Schema changes require reindexing. Record retrieval by ID is slow compared to SQLite. If OpenSearch is down, the app is completely broken.
 **Instead:** SQLite for metadata persistence, OpenSearch for search queries only.
 
-### Anti-Pattern 2: Blocking Upload on Whisper Completion
+### Anti-Pattern 2: Blocking Upload on Groq API Completion
 
-**What:** Making the POST /ingest endpoint synchronous — waiting for ffprobe + thumbnail + Whisper before responding.
-**Why bad:** Whisper on CPU takes 1-10x the video duration. A 10-minute video takes 10-100 minutes. The HTTP connection would time out. UX is completely broken.
+**What:** Making the POST /ingest endpoint synchronous — waiting for ffprobe + thumbnail + Groq transcription before responding.
+**Why bad:** Groq API calls can take significant time and may be rate-limited (429). The HTTP connection would time out. UX is completely broken.
 **Instead:** Respond 202 immediately after file copy + SQLite record creation. All pipeline work is async.
 
 ### Anti-Pattern 3: Storing Video Files Inside the Node Process Working Directory
@@ -364,11 +369,11 @@ Frontend polls `GET /assets/:id` every 3-5 seconds while `status !== 'ready'`. A
 **Why bad:** Files are lost on deployments, refactors, or if the app is moved. Relative paths break easily.
 **Instead:** `STORAGE_ROOT` environment variable resolved to absolute path at startup. Validate it exists and is writable on boot.
 
-### Anti-Pattern 4: Spawning Unbounded Whisper Processes
+### Anti-Pattern 4: Making Unbounded Concurrent Groq API Calls
 
-**What:** Kicking off a new Whisper child process for every ingest without concurrency limits.
-**Why bad:** Whisper loads a model (several hundred MB to GB) per process. Two simultaneous Whisper jobs on a CPU-only machine will saturate memory and CPU, causing OOM kills or severe thrashing.
-**Instead:** Single-concurrency job queue for Whisper. Queue depth is fine — jobs wait their turn.
+**What:** Firing off a new Groq API request for every ingest without concurrency limits.
+**Why bad:** Groq enforces rate limits. Unbounded concurrent requests will trigger 429 responses, cause failed transcriptions, and may exhaust API quota. Unlike local Whisper, the concern is rate limits and API costs — not CPU or RAM.
+**Instead:** Bounded concurrency job queue for Groq calls (3-5 concurrent). Implement exponential backoff retry on 429 responses. Queue depth is fine — jobs wait their turn.
 
 ### Anti-Pattern 5: Reindexing OpenSearch on Every Metadata Edit
 
@@ -409,8 +414,8 @@ Phase 4: Metadata Editing
   - Custom fields: POST /fields, GET /fields
   - Inline editing UI in detail panel
   ↓
-Phase 5: Whisper Transcription
-  - Whisper job stage added to ingest pipeline (after Phase 2 queue exists)
+Phase 5: Groq Transcription
+  - Groq API job stage added to ingest pipeline (after Phase 2 queue exists)
   - Transcript display in detail panel
   - Status polling (pending/running/complete/failed indicators)
   ↓
@@ -425,7 +430,7 @@ Phase 6: Search
 **Rationale for this order:**
 - Phase 2 before Phase 3: You need ingest working to have any assets to display.
 - Phase 3 before Phase 4: Browse must work before editing is useful.
-- Phase 5 after Phase 2: Whisper slots into the existing job queue — queue infrastructure must exist first.
+- Phase 5 after Phase 2: Groq transcription slots into the existing job queue — queue infrastructure must exist first.
 - Phase 6 last: Search depends on indexed data from all prior stages. Building search before data exists makes testing harder and creates a false sense of completeness.
 
 ---
@@ -437,7 +442,7 @@ This is a single-user local app — scalability is not a primary concern. Howeve
 | Concern | At current scale (1 user, <10K assets) | If ever needed |
 |---------|----------------------------------------|----------------|
 | SQLite write contention | Non-issue (single user, sequential writes) | Migrate to PostgreSQL (schema is standard SQL) |
-| Whisper throughput | p-queue, 1 concurrent, CPU-bound | Switch to whisper.cpp (3-5x faster), or add GPU |
+| Groq rate limits | p-queue, 3-5 concurrent, with 429 retry backoff | Implement retry queue, consider paid tier with higher limits |
 | OpenSearch sync lag | Async queue, seconds stale | Add SSE push on index completion |
 | Job persistence (crash recovery) | p-queue loses in-flight jobs on restart | Swap to BullMQ + Redis |
 | File count (filesystem) | Flat directories fine under ~100K files | Add hash-bucketed subdirectories |
@@ -446,8 +451,9 @@ This is a single-user local app — scalability is not a primary concern. Howeve
 
 ## Sources
 
-- Confidence: HIGH for SQLite single-user pattern, range request streaming, ffprobe/ffmpeg CLI patterns, Whisper CLI invocation — these are stable, well-documented patterns.
+- Confidence: HIGH for SQLite single-user pattern, range request streaming, ffprobe/ffmpeg CLI patterns — these are stable, well-documented patterns.
 - Confidence: HIGH for OpenSearch document schema design and index-as-derived-projection pattern.
+- Confidence: HIGH for Groq API (Whisper large-v3) invocation pattern via `groq-sdk` — official SDK with well-documented transcription endpoint.
 - Confidence: MEDIUM for `p-queue` as the specific queue library — this is a common recommendation but the npm ecosystem evolves; verify current download stats and maintenance status before committing.
 - Confidence: MEDIUM for `better-sqlite3` vs `@libsql/client` — both are valid; better-sqlite3 is more established for embedded SQLite in Node.js as of 2025.
 - Note: Web search tools were unavailable during this research session. All patterns are drawn from established architecture principles for Node.js media pipelines. Recommend verifying library version choices (ffprobe bindings, p-queue API) against current npm registry before implementation.
