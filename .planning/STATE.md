@@ -1,3 +1,17 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: unknown
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-03-22T21:41:06.319Z"
+progress:
+  total_phases: 6
+  completed_phases: 0
+  total_plans: 4
+  completed_plans: 1
+---
+
 # Project State
 
 ## Project Reference
@@ -5,20 +19,17 @@
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Find any video in your library instantly — by title, keyword, tag, or spoken word in the transcript.
-**Current focus:** Phase 1 — Foundation
+**Current focus:** Phase 01 — foundation
 
 ## Current Position
 
-Phase: 1 of 6 (Foundation)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-03-18 — Architecture review complete, all decisions locked, ready to begin Phase 1 planning
-
-Progress: [░░░░░░░░░░] 0%
+Phase: 01 (foundation) — EXECUTING
+Plan: 4 of 4 (COMPLETE)
 
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 0
 - Average duration: — min
 - Total execution time: 0 hours
@@ -30,10 +41,12 @@ Progress: [░░░░░░░░░░] 0%
 | - | - | - | - |
 
 **Recent Trend:**
+
 - Last 5 plans: none yet
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 01-foundation P04 | 1 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -55,6 +68,11 @@ Progress: [░░░░░░░░░░] 0%
 | OpenSearch | Already running on same Hetzner server — client version must match server version |
 | OpenSearch mapping | Must be defined BEFORE first document insert — `dynamic: false` after initial mapping |
 | CORS | Only needed in local development (Vite dev server vs Fastify port) — not in production |
+| Tags storage | Denormalized JSON array column in assets table (`tags TEXT DEFAULT '[]'`); use SQLite json_each() for filtering. No separate tags table. Consistent with overall schema philosophy. |
+| Ingest status updates | Polling via TanStack Query `refetchInterval` (3-5s while status !== 'ready'). SSE deferred to v2. No additional infrastructure needed. |
+| Video player | Native HTML5 `<video>` with custom controls overlay built in shadcn + Tailwind + Framer Motion. NOT Video.js — custom controls integrate better with Cinema Dark design system and MCP Magic component generation. Transcript seek uses `videoElement.currentTime` directly. |
+| Tailwind version | Use Tailwind CSS 3.x — shadcn/ui and MCP Magic 21st.dev components target Tailwind 3 config format. Tailwind 4 uses a breaking CSS-based config; do not upgrade until shadcn/ui officially supports it. |
+| SQL schema additions | Assets table requires: `file_hash TEXT UNIQUE` (SHA-256 for dedup), `frame_rate REAL` (META-01), `transcription_error TEXT` (error tracking). All added in Phase 1 migration. |
 
 ### Pending Todos
 
@@ -69,6 +87,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18
-Stopped at: Architecture review complete. All decisions locked. No plans written yet.
+Last session: 2026-03-22T21:41:06.315Z
+Stopped at: Completed 01-04-PLAN.md
 Resume file: None
