@@ -12,7 +12,7 @@ Six phases build the product from the ground up, each delivering one coherent ca
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - Project scaffolding, database schema, OpenSearch index mapping, storage layout
+- [ ] **Phase 1: Foundation** - Project scaffolding, database schema, OpenSearch index mapping, storage layout, nginx config and systemd service for Hetzner deployment
 - [ ] **Phase 2: Ingest Pipeline** - File import, metadata extraction, thumbnail generation, Groq transcription, OpenSearch indexing
 - [ ] **Phase 3: Browse and Playback** - Asset card grid, tag filter sidebar, in-app video player, transcription status display
 - [ ] **Phase 4: Metadata Editing** - Editable title/description/tags, custom global metadata fields
@@ -27,11 +27,17 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Requirements**: None (enabling infrastructure — all 19 v1 requirements depend on this phase)
 **Success Criteria** (what must be TRUE):
   1. The app starts with `npm run dev` (frontend) and `npm run dev` (backend) without errors and the health check endpoint returns 200
-  2. SQLite database initializes with the full schema and migrations run cleanly on a fresh checkout
+  2. SQLite database initializes with the full schema (including file_hash, frame_rate, transcription_error columns) and migrations run cleanly on a fresh checkout
   3. OpenSearch index exists with explicit field mappings (tags as keyword, duration as float, transcript as text, dynamic: false) — verified by inspecting the index before any document is inserted
   4. STORAGE_ROOT env var is validated at startup: server refuses to start if the directory does not exist
   5. GROQ_API_KEY is validated at startup and a clear error is shown if missing
-**Plans**: TBD
+  6. nginx config is written and documented: serves Vite-built frontend static files, proxies `/api` to Fastify. systemd service unit file exists for the Node.js backend process.
+**Plans:** 4 plans
+Plans:
+- [ ] 01-01-PLAN.md — Frontend scaffolding (Vite + React 18 + Tailwind 3 with Cinema Dark tokens)
+- [ ] 01-02-PLAN.md — Backend scaffolding (Fastify 4 + SQLite schema + drizzle-orm migrations)
+- [ ] 01-03-PLAN.md — Startup validation (env checks, OpenSearch index init, health check wiring)
+- [ ] 01-04-PLAN.md — Deployment configs (nginx reverse proxy + systemd service + documentation)
 
 ### Phase 2: Ingest Pipeline
 **Goal**: Users can import video files and the system automatically extracts metadata, generates a thumbnail, transcribes via Groq, and indexes the asset — all tracked per stage
@@ -96,7 +102,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/TBD | Not started | - |
+| 1. Foundation | 0/4 | Planning complete | - |
 | 2. Ingest Pipeline | 0/TBD | Not started | - |
 | 3. Browse and Playback | 0/TBD | Not started | - |
 | 4. Metadata Editing | 0/TBD | Not started | - |
