@@ -1,0 +1,15 @@
+:root {
+  --color-background: #0F0F23;
+  --color-panel: #1E1B4B;
+  --color-cta: #E11D48;
+  --color-text: #F8FAFC;
+  --color-text-muted: #94A3B8;
+  --color-border: #2D2A5E;
+}
+
+body {
+  margin: 0;
+  background-color: #0F0F23;
+  color: #F8FAFC;
+  font-family: 'Fira Sans', sans-serif;
+}
