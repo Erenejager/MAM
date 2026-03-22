@@ -1,0 +1,38 @@
+# MAM Backend — systemd service
+#
+# Install: sudo cp mam.service.example /etc/systemd/system/mam.service
+#          sudo systemctl daemon-reload
+#          sudo systemctl enable mam
+#          sudo systemctl start mam
+
+[Unit]
+Description=MAM Media Asset Management Backend
+After=network.target opensearch.service
+Wants=opensearch.service
+
+[Service]
+Type=simple
+User=mam
+Group=mam
+WorkingDirectory=/opt/mam/backend
+ExecStart=/usr/bin/node dist/index.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mam
+
+# Environment
+EnvironmentFile=/opt/mam/backend/.env
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/mnt/mam /home/mam/.mam
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
