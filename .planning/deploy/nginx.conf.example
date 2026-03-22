@@ -1,0 +1,57 @@
+# MAM — Media Asset Management
+# nginx reverse proxy configuration
+#
+# Install: sudo cp nginx.conf.example /etc/nginx/sites-available/mam
+#          sudo ln -s /etc/nginx/sites-available/mam /etc/nginx/sites-enabled/mam
+#          sudo nginx -t && sudo systemctl reload nginx
+
+server {
+    listen 80;
+    server_name _;  # Tailscale IP or hostname — no public domain needed
+
+    # Frontend: Vite-built static files
+    root /opt/mam/frontend/dist;
+    index index.html;
+
+    # Gzip for static assets
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml;
+    gzip_min_length 1000;
+
+    # API requests → Fastify backend
+    location /api/ {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Increase timeouts for large file uploads
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        client_max_body_size 10G;  # Allow large video file uploads
+    }
+
+    # Video streaming — proxy to backend for range request support
+    location /api/stream/ {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Range $http_range;
+        proxy_set_header If-Range $http_if_range;
+        proxy_buffering off;  # Disable buffering for streaming
+    }
+
+    # SPA fallback: all non-API, non-file routes → index.html
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Cache static assets
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+        expires 7d;
+        add_header Cache-Control "public, immutable";
+    }
+}
