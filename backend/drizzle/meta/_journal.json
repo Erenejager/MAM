@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1774215866563,
+      "tag": "0000_clever_firelord",
+      "breakpoints": true
+    }
+  ]
+}
