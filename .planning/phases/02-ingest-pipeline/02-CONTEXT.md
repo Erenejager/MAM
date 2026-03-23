@@ -35,6 +35,11 @@ Backend pipeline that accepts video file uploads and runs 4 sequential stages: m
 - **Transcription failure = auto-retry then soft-fail**: retry up to 3× with exponential backoff to handle Groq 429s (required by REQUIREMENTS.md). After all retries exhausted, mark `transcription_status = 'failed'` and continue — the asset is still usable without a transcript. `transcription_error` column stores the error message.
 - **No retry button in Phase 2**: failed status is visible, but re-import is the workaround. Retry UI is Phase 3+.
 
+### Cleanup on failure
+- **Pipeline stage failure** (e.g. ffprobe error after file is on disk): delete the asset directory from `STORAGE_ROOT/{uuid}/` and remove the SQLite record — clean slate, no orphaned files or error records.
+- **Mid-stream upload failure** (connection drop before file is fully written): delete the partial file from disk.
+- Transcription soft-fail is the **exception**: since the asset is still usable (has metadata + thumbnail), do NOT delete on transcription failure — only delete on hard pipeline halts (metadata stage failure).
+
 ### Multi-file handling
 - **Claude's discretion**: IMP-01 mentions "single or multiple files". Queue design (p-queue concurrency, per-file tracking) is left to the planner. At minimum, the drop zone must accept multiple files in one drop.
 
