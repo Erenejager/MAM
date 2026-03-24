@@ -5,4 +5,4 @@ import PQueue from 'p-queue';
  * Sequential execution prevents SQLite BUSY errors
  * when multiple pipeline stages update the same asset row.
  */
-export const pipelineQueue = new PQueue({ concurrency: 1 });
+export const pipelineQueue: InstanceType<typeof PQueue> = new PQueue({ concurrency: 1 });

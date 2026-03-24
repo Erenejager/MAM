@@ -1,11 +1,14 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
+import { resolve } from 'node:path';
 import { config } from 'dotenv';
 
 config(); // 1. Load .env
 
 import { validateEnv } from './bootstrap/validate-env.js';
 import { initOpenSearch } from './bootstrap/opensearch.js';
+import { assetRoutes } from './routes/assets.js';
 import './db/index.js'; // 3. Triggers DB connection
 
 const server = Fastify({ logger: true });
@@ -27,6 +30,16 @@ const start = async () => {
       origin: true, // Allow all origins in dev
     });
   }
+
+  // 6. Register asset routes (upload + status)
+  await server.register(assetRoutes);
+
+  // 6b. Serve uploaded files from STORAGE_ROOT
+  await server.register(fastifyStatic, {
+    root: resolve(process.env.STORAGE_ROOT!),
+    prefix: '/storage/',
+    decorateReply: false,
+  });
 
   // 7. Start listening
   const port = parseInt(process.env.PORT || '3001', 10);
