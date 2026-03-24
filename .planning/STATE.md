@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Phase 2 context gathered
-last_updated: "2026-03-23T23:04:55.489Z"
+stopped_at: Phase 2 UI-SPEC approved
+last_updated: "2026-03-24T17:03:32.396Z"
 progress:
   total_phases: 6
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  completed_phases: 2
+  total_plans: 5
+  completed_plans: 5
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Find any video in your library instantly — by title, keyword, tag, or spoken word in the transcript.
-**Current focus:** Phase 01 — foundation
+**Current focus:** Phase 02 — ingest-pipeline
 
 ## Current Position
 
-Phase: 01 (foundation) — EXECUTING
-Plan: 4 of 4
+Phase: 02 (ingest-pipeline) — Plan 01 COMPLETE
+Plan: 1 of 1 (complete)
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Plan: 4 of 4
 | Phase 01-foundation P01 | 3 min | 2 tasks | 11 files |
 | Phase 01-foundation P02 | 8 min | 2 tasks | 11 files |
 | Phase 01-foundation P03 | 3 min | 3 tasks | 3 files |
+| Phase 02-ingest-pipeline P01 | 3 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -83,6 +84,8 @@ Plan: 4 of 4
 - [Phase 01-foundation]: Drizzle ORM v0.36 composite primary key uses object return syntax, not array
 - [Phase 01-foundation]: OpenSearch connection failure is warning-only, not fatal -- server continues without search
 - [Phase 01-foundation]: Boot sequence: dotenv -> validateEnv -> db -> opensearch -> cors -> listen
+- [Phase 02-ingest-pipeline]: saveAndHash returns {hash, size} object -- avoids extra fs.stat after write
+- [Phase 02-ingest-pipeline]: p-queue needs explicit InstanceType<typeof PQueue> annotation for TS portability
 
 ### Pending Todos
 
@@ -97,6 +100,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-23T23:04:55.482Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-ingest-pipeline/02-CONTEXT.md
+Last session: 2026-03-24T17:03:00Z
+Stopped at: Completed 02-01-PLAN.md
+Resume file: .planning/phases/02-ingest-pipeline/02-01-SUMMARY.md

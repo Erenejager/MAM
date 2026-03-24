@@ -7,8 +7,8 @@
 
 ### Import
 
-- [ ] **IMP-01**: User can import videos via drag-and-drop or file picker (single or multiple files)
-- [ ] **IMP-02**: System detects and blocks duplicate files using content hash
+- [x] **IMP-01**: User can import videos via drag-and-drop or file picker (single or multiple files)
+- [x] **IMP-02**: System detects and blocks duplicate files using content hash
 - [ ] **IMP-03**: User can see per-stage import progress: metadata → thumbnail → transcription → indexed
 
 ### Metadata
@@ -82,8 +82,8 @@ Transcription is generated via **Groq API** (Whisper large-v3) as a background j
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| IMP-01 | Phase 2 | Pending |
-| IMP-02 | Phase 2 | Pending |
+| IMP-01 | Phase 2 | Complete |
+| IMP-02 | Phase 2 | Complete |
 | IMP-03 | Phase 2 | Pending |
 | META-01 | Phase 2 | Pending |
 | META-02 | Phase 4 | Pending |
