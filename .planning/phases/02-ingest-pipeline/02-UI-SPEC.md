@@ -50,7 +50,7 @@ Exceptions: none
 | Role | Size | Weight | Line Height | Font Family |
 |------|------|--------|-------------|-------------|
 | Body | 16px | 400 (regular) | 1.5 | Fira Sans |
-| Label / Stage text | 14px | 500 (medium) | 1.4 | Fira Sans |
+| Label / Stage text | 14px | 400 (regular) | 1.4 | Fira Sans |
 | Heading / Drop zone prompt | 20px | 600 (semibold) | 1.2 | Fira Sans |
 | Technical data (elapsed time) | 14px | 400 (regular) | 1.4 | Fira Code |
 
@@ -132,7 +132,7 @@ All colors are already defined in `frontend/tailwind.config.cjs` and `frontend/s
 
 **Layout:**
 - Centered container, max-width 480px, horizontally centered
-- Stage label above bar: e.g. "Extracting metadata..." at 14px/500 in `#F8FAFC`
+- Stage label above bar: e.g. "Extracting metadata..." at 14px/400 in `#F8FAFC`
 - Progress bar: full width of container, height 8px, rounded-full (4px radius)
 - Progress bar track: `#1E1B4B` (panel)
 - Progress bar fill: `#E11D48` (cta) during processing, `#10B981` (status-complete) on completion, `#E11D48` on failure
