@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed discuss-phase 03
-last_updated: "2026-03-24T00:00:00.000Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-03-25T16:10:46.563Z"
 progress:
   total_phases: 6
-  completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
+  completed_phases: 1
+  total_plans: 11
+  completed_plans: 6
 ---
 
 # Project State
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 
 ## Current Position
 
-Phase: 02 (ingest-pipeline) — Plan 01 COMPLETE
-Plan: 1 of 1 (complete)
+Phase: 03 (browse-and-playback) — EXECUTING
+Plan: 1 of 4
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Plan: 1 of 1 (complete)
 | Phase 01-foundation P02 | 8 min | 2 tasks | 11 files |
 | Phase 01-foundation P03 | 3 min | 3 tasks | 3 files |
 | Phase 02-ingest-pipeline P01 | 3 min | 2 tasks | 7 files |
+| Phase 03 P02 | 2 | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,9 @@ Plan: 1 of 1 (complete)
 - [Phase 01-foundation]: Boot sequence: dotenv -> validateEnv -> db -> opensearch -> cors -> listen
 - [Phase 02-ingest-pipeline]: saveAndHash returns {hash, size} object -- avoids extra fs.stat after write
 - [Phase 02-ingest-pipeline]: p-queue needs explicit InstanceType<typeof PQueue> annotation for TS portability
+- [Phase 03]: TanStack Query v5 refetchInterval uses callback form — stops polling automatically when status leaves ingesting
+- [Phase 03]: API base path '/api' without port — works via Vite proxy in dev and directly in production
+- [Phase 03]: Query key conventions: ['assets'] list, ['assets', id] single, ['tags'] tag counts
 
 ### Pending Todos
 
@@ -100,6 +104,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-24T17:03:00Z
-Stopped at: Completed 02-01-PLAN.md
-Resume file: .planning/phases/02-ingest-pipeline/02-01-SUMMARY.md
+Last session: 2026-03-25T16:10:46.556Z
+Stopped at: Completed 03-02-PLAN.md
+Resume file: None

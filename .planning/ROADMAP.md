@@ -61,7 +61,7 @@ Plans:
   3. User can play a video in-app by clicking it — the player starts on click, does not autoplay, and video seeking (scrubbing) works correctly (HTTP 206 range requests)
   4. User can delete an asset and is offered the choice to remove it from the library only, or delete the file from disk as well
   5. Transcription status (pending / processing / complete / failed) is visible per card and updates without a full page reload
-**Plans:** 4 plans
+**Plans:** 1/4 plans executed
 Plans:
 - [ ] 03-01-PLAN.md — Backend API endpoints (list, tags, delete, patch) + tests
 - [ ] 03-02-PLAN.md — Frontend foundation (deps, types, utilities, hooks)
@@ -109,7 +109,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Foundation | 4/4 | Complete   | 2026-03-22 |
 | 2. Ingest Pipeline | 1/1 | Complete   | 2026-03-24 |
-| 3. Browse and Playback | 0/4 | In Progress | - |
+| 3. Browse and Playback | 1/4 | In Progress|  |
 | 4. Metadata Editing | 0/TBD | Not started | - |
 | 5. Transcript Viewer | 0/TBD | Not started | - |
 | 6. Search | 0/TBD | Not started | - |
