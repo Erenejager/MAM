@@ -3,7 +3,7 @@ import multipart from '@fastify/multipart';
 import { randomUUID } from 'node:crypto';
 import { mkdir, rm } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { assets } from '../db/schema.js';
 import { saveAndHash } from '../lib/hash.js';
@@ -102,5 +102,96 @@ export async function assetRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     return asset;
+  });
+
+  /**
+   * GET /api/assets — list all assets with optional tag filter
+   * Query params: tags (string | string[]) — AND filter when multiple values
+   */
+  fastify.get<{
+    Querystring: { tags?: string | string[] };
+  }>('/api/assets', async (request) => {
+    const { tags } = request.query;
+    const tagList = tags ? (Array.isArray(tags) ? tags : [tags]) : [];
+
+    if (tagList.length > 0) {
+      return db
+        .select()
+        .from(assets)
+        .where(
+          sql`(SELECT COUNT(DISTINCT value) FROM json_each(${assets.tags}) WHERE value IN (${sql.join(tagList.map((t) => sql`${t}`), sql`, `)})) = ${tagList.length}`
+        )
+        .orderBy(sql`${assets.createdAt} DESC`)
+        .all();
+    }
+
+    return db.select().from(assets).orderBy(sql`${assets.createdAt} DESC`).all();
+  });
+
+  /**
+   * GET /api/tags — unique tags with counts, ordered alphabetically
+   */
+  fastify.get('/api/tags', async () => {
+    const rows = db.$client
+      .prepare(
+        `SELECT value as tag, COUNT(*) as count
+         FROM assets, json_each(assets.tags)
+         GROUP BY value
+         ORDER BY value`
+      )
+      .all() as { tag: string; count: number }[];
+    return rows;
+  });
+
+  /**
+   * DELETE /api/assets/:id — remove DB record and optionally disk files
+   * Query params: deleteFile=true to also remove STORAGE_ROOT/{uuid}/ directory
+   */
+  fastify.delete<{
+    Params: { id: string };
+    Querystring: { deleteFile?: string };
+  }>('/api/assets/:id', async (request, reply) => {
+    const { id } = request.params;
+    const deleteFile = request.query.deleteFile === 'true';
+
+    const asset = db.select().from(assets).where(eq(assets.id, id)).get();
+    if (!asset) {
+      return reply.status(404).send({ error: 'Asset not found' });
+    }
+
+    db.delete(assets).where(eq(assets.id, id)).run();
+
+    if (deleteFile) {
+      const storageRoot = process.env.STORAGE_ROOT!;
+      const assetDir = resolve(storageRoot, id);
+      await rm(assetDir, { recursive: true, force: true });
+    }
+
+    return reply.status(204).send();
+  });
+
+  /**
+   * PATCH /api/assets/:id — update asset fields (tags)
+   */
+  fastify.patch<{
+    Params: { id: string };
+    Body: { tags?: string[] };
+  }>('/api/assets/:id', async (request, reply) => {
+    const { id } = request.params;
+    const { tags } = request.body as { tags?: string[] };
+
+    const asset = db.select().from(assets).where(eq(assets.id, id)).get();
+    if (!asset) {
+      return reply.status(404).send({ error: 'Asset not found' });
+    }
+
+    if (tags !== undefined) {
+      db.update(assets)
+        .set({ tags: JSON.stringify(tags), updatedAt: new Date().toISOString() })
+        .where(eq(assets.id, id))
+        .run();
+    }
+
+    return db.select().from(assets).where(eq(assets.id, id)).get();
   });
 }
