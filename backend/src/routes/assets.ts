@@ -8,11 +8,7 @@ import { db } from '../db/index.js';
 import { assets } from '../db/schema.js';
 import { saveAndHash } from '../lib/hash.js';
 import { pipelineQueue } from '../lib/queue.js';
-
-/** Placeholder — wired to real pipeline in Plan 02 */
-async function runPipeline(assetId: string): Promise<void> {
-  /* wired in Plan 02 */
-}
+import { runPipeline } from '../lib/pipeline.js';
 
 export async function assetRoutes(fastify: FastifyInstance): Promise<void> {
   await fastify.register(multipart, {
