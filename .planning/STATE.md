@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-03-25T16:10:46.563Z"
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-03-25T16:11:28.304Z"
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 11
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 # Project State
@@ -52,6 +52,7 @@ Plan: 1 of 4
 | Phase 01-foundation P03 | 3 min | 3 tasks | 3 files |
 | Phase 02-ingest-pipeline P01 | 3 min | 2 tasks | 7 files |
 | Phase 03 P02 | 2 | 2 tasks | 8 files |
+| Phase 03-browse-and-playback P01 | 3 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,8 @@ Plan: 1 of 4
 - [Phase 03]: TanStack Query v5 refetchInterval uses callback form — stops polling automatically when status leaves ingesting
 - [Phase 03]: API base path '/api' without port — works via Vite proxy in dev and directly in production
 - [Phase 03]: Query key conventions: ['assets'] list, ['assets', id] single, ['tags'] tag counts
+- [Phase 03-browse-and-playback]: Use db.$client.prepare().all() for json_each aggregation — Drizzle 0.36 cannot express GROUP BY on virtual json_each table
+- [Phase 03-browse-and-playback]: Tag AND-filtering via COUNT(DISTINCT value) FROM json_each WHERE value IN (...) = N handles duplicates correctly
 
 ### Pending Todos
 
@@ -104,6 +107,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T16:10:46.556Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-03-25T16:11:28.298Z
+Stopped at: Completed 03-01-PLAN.md
 Resume file: None

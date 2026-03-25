@@ -22,8 +22,8 @@
 
 - [x] **BRWS-01**: User sees full-width asset cards with thumbnail, title, duration, tags, and transcript preview
 - [ ] **BRWS-02**: System auto-generates a thumbnail per asset on import (via ffmpeg)
-- [ ] **BRWS-03**: User can filter the asset list by clicking a tag in the sidebar
-- [ ] **BRWS-04**: User can delete an asset from the library (with option to also delete the file)
+- [x] **BRWS-03**: User can filter the asset list by clicking a tag in the sidebar
+- [x] **BRWS-04**: User can delete an asset from the library (with option to also delete the file)
 
 ### Playback
 
@@ -91,8 +91,8 @@ Transcription is generated via **Groq API** (Whisper large-v3) as a background j
 | META-04 | Phase 4 | Pending |
 | BRWS-01 | Phase 3 | Complete |
 | BRWS-02 | Phase 2 | Pending |
-| BRWS-03 | Phase 3 | Pending |
-| BRWS-04 | Phase 3 | Pending |
+| BRWS-03 | Phase 3 | Complete |
+| BRWS-04 | Phase 3 | Complete |
 | PLAY-01 | Phase 3 | Pending |
 | PLAY-02 | Phase 5 | Pending |
 | PLAY-03 | Phase 5 | Pending |
