@@ -1,9 +1,7 @@
+import { ImportView } from './components/ImportView';
+
 function App() {
-  return (
-    <div className="min-h-screen bg-background text-text">
-      MAM
-    </div>
-  );
+  return <ImportView />;
 }
 
 export default App;
