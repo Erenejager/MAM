@@ -9,11 +9,11 @@
 
 - [x] **IMP-01**: User can import videos via drag-and-drop or file picker (single or multiple files)
 - [x] **IMP-02**: System detects and blocks duplicate files using content hash
-- [ ] **IMP-03**: User can see per-stage import progress: metadata → thumbnail → transcription → indexed
+- [x] **IMP-03**: User can see per-stage import progress: metadata → thumbnail → transcription → indexed
 
 ### Metadata
 
-- [ ] **META-01**: System auto-extracts duration, codec, resolution, frame rate, and file size on import (via ffprobe)
+- [x] **META-01**: System auto-extracts duration, codec, resolution, frame rate, and file size on import (via ffprobe)
 - [ ] **META-02**: User can edit title and description per asset
 - [ ] **META-03**: User can add and remove tags (multi-value) per asset
 - [ ] **META-04**: Admin can define global custom metadata fields applied to all assets
@@ -84,8 +84,8 @@ Transcription is generated via **Groq API** (Whisper large-v3) as a background j
 |-------------|-------|--------|
 | IMP-01 | Phase 2 | Complete |
 | IMP-02 | Phase 2 | Complete |
-| IMP-03 | Phase 2 | Pending |
-| META-01 | Phase 2 | Pending |
+| IMP-03 | Phase 2 | Complete |
+| META-01 | Phase 2 | Complete |
 | META-02 | Phase 4 | Pending |
 | META-03 | Phase 4 | Pending |
 | META-04 | Phase 4 | Pending |

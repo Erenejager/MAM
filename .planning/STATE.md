@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-03-25T16:11:28.304Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-03-26T15:28:06.647Z"
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 11
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Find any video in your library instantly — by title, keyword, tag, or spoken word in the transcript.
-**Current focus:** Phase 03 — browse-and-playback
+**Current focus:** Phase 02 — ingest-pipeline
 
 ## Current Position
 
-Phase: 03 (browse-and-playback) — EXECUTING
-Plan: 1 of 4
+Phase: 02 (ingest-pipeline) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Plan: 1 of 4
 | Phase 02-ingest-pipeline P01 | 3 min | 2 tasks | 7 files |
 | Phase 03 P02 | 2 | 2 tasks | 8 files |
 | Phase 03-browse-and-playback P01 | 3 | 2 tasks | 3 files |
+| Phase 02 P02 | 1 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,8 @@ Plan: 1 of 4
 - [Phase 03]: Query key conventions: ['assets'] list, ['assets', id] single, ['tags'] tag counts
 - [Phase 03-browse-and-playback]: Use db.$client.prepare().all() for json_each aggregation — Drizzle 0.36 cannot express GROUP BY on virtual json_each table
 - [Phase 03-browse-and-playback]: Tag AND-filtering via COUNT(DISTINCT value) FROM json_each WHERE value IN (...) = N handles duplicates correctly
+- [Phase 02]: Hard failure on metadata/thumbnail deletes asset dir and DB record — no orphans
+- [Phase 02]: Soft failure on transcription/search — asset remains usable, status marked failed/skipped
 
 ### Pending Todos
 
@@ -107,6 +110,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T16:11:28.298Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-03-26T15:28:06.639Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
