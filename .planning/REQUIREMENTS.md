@@ -27,7 +27,7 @@
 
 ### Playback
 
-- [ ] **PLAY-01**: User can play a video in-app via click (no autoplay)
+- [x] **PLAY-01**: User can play a video in-app via click (no autoplay)
 - [ ] **PLAY-02**: User can view a scrollable transcript with timestamps alongside the player
 - [ ] **PLAY-03**: User can click a transcript line to seek the player to that timestamp
 - [x] **PLAY-04**: User can see transcription status (pending / processing / complete / failed) per asset
@@ -93,7 +93,7 @@ Transcription is generated via **Groq API** (Whisper large-v3) as a background j
 | BRWS-02 | Phase 2 | Pending |
 | BRWS-03 | Phase 3 | Complete |
 | BRWS-04 | Phase 3 | Complete |
-| PLAY-01 | Phase 3 | Pending |
+| PLAY-01 | Phase 3 | Complete |
 | PLAY-02 | Phase 5 | Pending |
 | PLAY-03 | Phase 5 | Pending |
 | PLAY-04 | Phase 3 | Complete |
