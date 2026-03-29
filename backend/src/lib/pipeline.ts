@@ -147,6 +147,7 @@ async function indexInOpenSearch(
   assetId: string,
   data: {
     title: string | null;
+    description: string | null;
     tags: string | null;
     transcriptText: string | null;
     durationSeconds: number | null;
@@ -162,6 +163,7 @@ async function indexInOpenSearch(
     body: {
       id: assetId,
       title: data.title ?? '',
+      description: data.description ?? '',
       tags: JSON.parse(data.tags ?? '[]') as string[],
       transcript: data.transcriptText ?? '',
       duration_seconds: data.durationSeconds,
@@ -253,6 +255,7 @@ export async function runPipeline(assetId: string): Promise<void> {
     if (fresh) {
       await indexInOpenSearch(assetId, {
         title: fresh.title,
+        description: fresh.description,
         tags: fresh.tags,
         transcriptText: fresh.transcriptText,
         durationSeconds: fresh.durationSeconds,

@@ -9,6 +9,7 @@ config(); // 1. Load .env
 import { validateEnv } from './bootstrap/validate-env.js';
 import { initOpenSearch } from './bootstrap/opensearch.js';
 import { assetRoutes } from './routes/assets.js';
+import { customFieldRoutes } from './routes/custom-fields.js';
 import './db/index.js'; // 3. Triggers DB connection
 
 const server = Fastify({ logger: true });
@@ -33,6 +34,9 @@ const start = async () => {
 
   // 6. Register asset routes (upload + status)
   await server.register(assetRoutes);
+
+  // 6a. Register custom field routes (CRUD + custom values)
+  await server.register(customFieldRoutes);
 
   // 6b. Serve uploaded files from STORAGE_ROOT
   await server.register(fastifyStatic, {

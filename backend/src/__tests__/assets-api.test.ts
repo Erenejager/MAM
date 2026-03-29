@@ -81,6 +81,16 @@ vi.mock('../lib/hash.js', () => ({
   saveAndHash: vi.fn().mockResolvedValue({ hash: 'abc123', size: 1000 }),
 }));
 
+// Mock opensearch
+vi.mock('../bootstrap/opensearch.js', () => ({
+  opensearchClient: {
+    index: vi.fn().mockResolvedValue({}),
+    update: vi.fn().mockResolvedValue({}),
+    delete: vi.fn().mockResolvedValue({}),
+  },
+  initOpenSearch: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { assetRoutes } from '../routes/assets.js';
 import { db } from '../db/index.js';
 import { assets } from '../db/schema.js';

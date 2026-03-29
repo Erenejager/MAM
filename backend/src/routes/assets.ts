@@ -9,6 +9,7 @@ import { assets } from '../db/schema.js';
 import { saveAndHash } from '../lib/hash.js';
 import { pipelineQueue } from '../lib/queue.js';
 import { runPipeline } from '../lib/pipeline.js';
+import { opensearchClient } from '../bootstrap/opensearch.js';
 
 export async function assetRoutes(fastify: FastifyInstance): Promise<void> {
   await fastify.register(multipart, {
@@ -171,25 +172,50 @@ export async function assetRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   /**
-   * PATCH /api/assets/:id — update asset fields (tags)
+   * PATCH /api/assets/:id — update asset fields (title, description, tags)
+   * Fire-and-forget partial OpenSearch update for changed fields.
    */
   fastify.patch<{
     Params: { id: string };
-    Body: { tags?: string[] };
+    Body: { title?: string; description?: string; tags?: string[] };
   }>('/api/assets/:id', async (request, reply) => {
     const { id } = request.params;
-    const { tags } = request.body as { tags?: string[] };
+    const { title, description, tags } = request.body as {
+      title?: string;
+      description?: string;
+      tags?: string[];
+    };
 
     const asset = db.select().from(assets).where(eq(assets.id, id)).get();
     if (!asset) {
       return reply.status(404).send({ error: 'Asset not found' });
     }
 
-    if (tags !== undefined) {
-      db.update(assets)
-        .set({ tags: JSON.stringify(tags), updatedAt: new Date().toISOString() })
-        .where(eq(assets.id, id))
-        .run();
+    // Build updates object with only provided fields
+    const updates: Partial<typeof assets.$inferInsert> = {
+      updatedAt: new Date().toISOString(),
+    };
+    if (title !== undefined) updates.title = title;
+    if (description !== undefined) updates.description = description;
+    if (tags !== undefined) updates.tags = JSON.stringify(tags);
+
+    // Only write if there are actual field changes (beyond updatedAt)
+    if (title !== undefined || description !== undefined || tags !== undefined) {
+      db.update(assets).set(updates).where(eq(assets.id, id)).run();
+
+      // Fire-and-forget partial OpenSearch update — only send changed fields
+      const osDoc: Record<string, unknown> = {};
+      if (title !== undefined) osDoc.title = title;
+      if (description !== undefined) osDoc.description = description;
+      if (tags !== undefined) osDoc.tags = tags;
+
+      if (Object.keys(osDoc).length > 0) {
+        opensearchClient.update({
+          index: 'mam-assets',
+          id,
+          body: { doc: osDoc },
+        }).catch((err: Error) => console.warn('OpenSearch partial update failed (PATCH):', err.message));
+      }
     }
 
     return db.select().from(assets).where(eq(assets.id, id)).get();
