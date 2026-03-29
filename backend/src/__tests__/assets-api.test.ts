@@ -344,4 +344,87 @@ describe('PATCH /api/assets/:id', () => {
 
     await app.close();
   });
+
+  it('updates title and returns the updated asset', async () => {
+    const app: FastifyInstance = Fastify();
+    await app.register(assetRoutes);
+
+    const asset = seedAsset({ id: 'patch-title' });
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/assets/${asset.id}`,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'New Title' }),
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ title: string }>();
+    expect(body.title).toBe('New Title');
+
+    await app.close();
+  });
+
+  it('updates description and returns the updated asset', async () => {
+    const app: FastifyInstance = Fastify();
+    await app.register(assetRoutes);
+
+    const asset = seedAsset({ id: 'patch-desc' });
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/assets/${asset.id}`,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ description: 'New desc' }),
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ description: string }>();
+    expect(body.description).toBe('New desc');
+
+    await app.close();
+  });
+
+  it('updates title, description, and tags together', async () => {
+    const app: FastifyInstance = Fastify();
+    await app.register(assetRoutes);
+
+    const asset = seedAsset({ id: 'patch-all' });
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/assets/${asset.id}`,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'T', description: 'D', tags: ['a'] }),
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ title: string; description: string; tags: string }>();
+    expect(body.title).toBe('T');
+    expect(body.description).toBe('D');
+    expect(JSON.parse(body.tags)).toEqual(['a']);
+
+    await app.close();
+  });
+
+  it('returns 200 with unchanged asset when no recognized fields sent', async () => {
+    const app: FastifyInstance = Fastify();
+    await app.register(assetRoutes);
+
+    const asset = seedAsset({ id: 'patch-noop', tags: '["existing"]' });
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/assets/${asset.id}`,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ id: string; tags: string }>();
+    expect(body.id).toBe('patch-noop');
+    expect(JSON.parse(body.tags)).toEqual(['existing']);
+
+    await app.close();
+  });
 });
