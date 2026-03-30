@@ -12,20 +12,19 @@ Find any video in your library instantly — by title, keyword, tag, or spoken w
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] User can import video files via drag-and-drop or file picker — Validated in Phase 02: Ingest Pipeline
+- [x] User can browse all assets as full-width cards with thumbnail, duration, size, and tags — Validated in Phase 03: Browse and Playback
+- [x] User can play back a video in-app (click-to-play, no autoplay) — Validated in Phase 03: Browse and Playback
+- [x] System auto-extracts technical metadata on import: duration, file size, codec, resolution — Validated in Phase 02: Ingest Pipeline
+- [x] System auto-generates a thumbnail on import — Validated in Phase 02: Ingest Pipeline
+- [x] User can view and edit metadata: title, description, tags — Validated in Phase 04: Metadata Editing
+- [x] User can define global custom metadata fields applied to all assets — Validated in Phase 04: Metadata Editing
 
 ### Active
 
-- [ ] User can import video files via drag-and-drop or file picker
-- [ ] User can browse all assets as full-width cards with thumbnail, duration, size, and tags
-- [ ] User can play back a video in-app (click-to-play, no autoplay)
-- [ ] User can view and edit metadata: title, description, tags
 - [ ] User can view full transcription for a video asset
 - [ ] User can search across assets using OpenSearch (title, description, tags, transcript content)
 - [ ] Transcription is auto-generated on import using Groq API (Whisper large-v3)
-- [ ] User can define global custom metadata fields applied to all assets
-- [ ] System auto-extracts technical metadata on import: duration, file size, codec, resolution
-- [ ] System auto-generates a thumbnail on import
 
 ### Out of Scope
 
@@ -72,4 +71,4 @@ Find any video in your library instantly — by title, keyword, tag, or spoken w
 | React + Vite stack | Fast DX, component ecosystem, shadcn/ui available | Confirmed |
 
 ---
-*Last updated: 2026-03-18 — updated deployment to Hetzner + Tailscale, transcription to Groq API*
+*Last updated: 2026-03-30 — Phase 04 complete: metadata editing (inline title/description/tags, custom fields, Settings page)*
