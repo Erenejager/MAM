@@ -36,3 +36,16 @@ export interface TagCount {
   tag: string;
   count: number;
 }
+
+export interface CustomField {
+  id: string;
+  name: string;
+  fieldType: string;
+  createdAt: string;
+}
+
+export interface CustomValue {
+  assetId: string;
+  fieldId: string;
+  value: string | null;
+}
