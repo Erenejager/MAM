@@ -49,3 +49,25 @@ export interface CustomValue {
   fieldId: string;
   value: string | null;
 }
+
+export interface SearchTranscriptMatch {
+  text: string;          // highlight fragment with <em> tags
+  timestamp: number;     // start time in seconds
+  matchCount: number;    // approximate total transcript matches
+}
+
+export interface SearchResult {
+  id: string;
+  score: number;
+  highlights: {
+    title?: string[];
+    description?: string[];
+    transcript?: string[];
+  };
+  transcriptMatch?: SearchTranscriptMatch;
+}
+
+export interface SearchResponse {
+  results: SearchResult[];
+  error?: string;
+}

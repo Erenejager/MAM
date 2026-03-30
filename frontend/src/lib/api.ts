@@ -1,4 +1,4 @@
-import type { Asset, TagCount, CustomField, CustomValue } from '../types/asset';
+import type { Asset, TagCount, CustomField, CustomValue, SearchResponse } from '../types/asset';
 
 const API_BASE = '/api';
 
@@ -89,5 +89,19 @@ export async function patchCustomValue(assetId: string, fieldId: string, value: 
     body: JSON.stringify({ value }),
   });
   if (!res.ok) throw new Error(`Failed to update custom value: ${res.status}`);
+  return res.json();
+}
+
+export async function searchAssets(q: string, tags?: string[]): Promise<SearchResponse> {
+  const params = new URLSearchParams();
+  params.append('q', q);
+  if (tags && tags.length > 0) {
+    tags.forEach(t => params.append('tags', t));
+  }
+  const res = await fetch(`${API_BASE}/search?${params.toString()}`);
+  if (res.status === 503) {
+    return { results: [], error: 'search_unavailable' };
+  }
+  if (!res.ok) throw new Error(`Search failed: ${res.status}`);
   return res.json();
 }
