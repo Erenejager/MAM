@@ -11,6 +11,9 @@ import type { TranscriptSegment } from '../../types/asset';
 interface DetailPanelProps {
   assetId: string;
   onClose: () => void;
+  initialTab?: 'info' | 'transcript';
+  seekTimestamp?: number;
+  onOpened?: () => void;
 }
 
 export function DetailPanel({ assetId, onClose }: DetailPanelProps) {

@@ -10,6 +10,9 @@ interface AssetGridProps {
   selectedTags: string[];
   selectedAssetId: string | null;
   onSelectAsset: (id: string | null) => void;
+  searchQuery?: string;
+  searchResults?: Map<string, import('../../types/asset').SearchResult>;
+  onTimecodeClick?: (assetId: string, timestamp: number) => void;
 }
 
 export function AssetGrid({ selectedTags, selectedAssetId, onSelectAsset }: AssetGridProps) {

@@ -1,14 +1,13 @@
-import { TopBar } from './TopBar';
-
 interface AppShellProps {
+  topBar: React.ReactNode;
   sidebar: React.ReactNode;
   children: React.ReactNode;
 }
 
-export function AppShell({ sidebar, children }: AppShellProps) {
+export function AppShell({ topBar, sidebar, children }: AppShellProps) {
   return (
-    <div className="h-screen grid grid-rows-[48px_1fr] overflow-hidden bg-background">
-      <TopBar />
+    <div className="h-screen grid grid-rows-[auto_1fr] overflow-hidden bg-background">
+      {topBar}
       <div className="grid grid-cols-[240px_1fr] overflow-hidden">
         <aside className="bg-panel border-r border-border overflow-y-auto">
           {sidebar}
