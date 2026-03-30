@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Foundation** - Project scaffolding, database schema, OpenSearch index mapping, storage layout, nginx config and systemd service for Hetzner deployment (completed 2026-03-22)
 - [x] **Phase 2: Ingest Pipeline** - File import, metadata extraction, thumbnail generation, Groq transcription, OpenSearch indexing (completed 2026-03-24)
 - [ ] **Phase 3: Browse and Playback** - Asset card grid, tag filter sidebar, in-app video player, transcription status display
-- [ ] **Phase 4: Metadata Editing** - Editable title/description/tags, custom global metadata fields
+- [x] **Phase 4: Metadata Editing** - Editable title/description/tags, custom global metadata fields (completed 2026-03-30)
 - [ ] **Phase 5: Transcript Viewer** - Scrollable transcript panel, jump-to-timestamp, player sync
 - [ ] **Phase 6: Search** - Full-text search across metadata and transcript, highlighted excerpts with timecode links, asset deletion
 
@@ -110,6 +110,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Foundation | 4/4 | Complete   | 2026-03-22 |
 | 2. Ingest Pipeline | 3/3 | Complete   | 2026-03-26 |
 | 3. Browse and Playback | 1/4 | In Progress|  |
-| 4. Metadata Editing | 2/3 | In Progress|  |
+| 4. Metadata Editing | 3/3 | Complete   | 2026-03-30 |
 | 5. Transcript Viewer | 0/TBD | Not started | - |
 | 6. Search | 0/TBD | Not started | - |
