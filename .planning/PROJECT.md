@@ -20,10 +20,10 @@ Find any video in your library instantly — by title, keyword, tag, or spoken w
 - [x] User can view and edit metadata: title, description, tags — Validated in Phase 04: Metadata Editing
 - [x] User can define global custom metadata fields applied to all assets — Validated in Phase 04: Metadata Editing
 - [x] User can view full transcription for a video asset — Validated in Phase 05: Transcript Viewer
+- [x] User can search across assets using OpenSearch (title, description, tags, transcript content) — Validated in Phase 06: Search
 
 ### Active
 
-- [ ] User can search across assets using OpenSearch (title, description, tags, transcript content)
 - [ ] Transcription is auto-generated on import using Groq API (Whisper large-v3)
 
 ### Out of Scope
@@ -71,4 +71,4 @@ Find any video in your library instantly — by title, keyword, tag, or spoken w
 | React + Vite stack | Fast DX, component ecosystem, shadcn/ui available | Confirmed |
 
 ---
-*Last updated: 2026-03-30 — Phase 05 complete: transcript viewer (tab layout, scrollable transcript, click-to-seek, in-transcript search)*
+*Last updated: 2026-03-30 — Phase 06 complete: full-text search across title, description, tags, and transcript with highlighted results and timecode deep-linking*
