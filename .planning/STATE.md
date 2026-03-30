@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Phase 4 context gathered
-last_updated: "2026-03-29T20:17:54.391Z"
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-03-30T09:00:42Z"
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 11
-  completed_plans: 11
+  total_plans: 14
+  completed_plans: 12
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Find any video in your library instantly — by title, keyword, tag, or spoken word in the transcript.
-**Current focus:** Phase 03 — browse-and-playback (COMPLETE)
+**Current focus:** Phase 04 — metadata-editing
 
 ## Current Position
 
-Phase: 03 (browse-and-playback) — COMPLETE
-Plan: 4 of 4
+Phase: 04 (metadata-editing) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Plan: 4 of 4
 | Phase 02 P02 | 1 | 2 tasks | 2 files |
 | Phase 02 P03 | 1 | 2 tasks | 4 files |
 | Phase 03 P04 | 5 | 3 tasks | 5 files |
+| Phase 04 P01 | 3 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,9 @@ Plan: 4 of 4
 - [Phase 02]: Soft failure on transcription/search — asset remains usable, status marked failed/skipped
 - [Phase 02]: Single ImportView component manages all states via discriminated union rather than separate components
 - [Phase 03]: Shared videoRef passed from DetailPanel to both VideoPlayer and TranscriptList for transcript sync
+- [Phase 04]: Partial OpenSearch update on PATCH (opensearchClient.update with doc merge) avoids re-reading transcript blob
+- [Phase 04]: Custom value upsert uses raw SQL ON CONFLICT DO UPDATE since Drizzle 0.36 lacks native upsert for composite PKs
+- [Phase 04]: No putMapping needed for description -- field was already in INDEX_MAPPING since Phase 1
 
 ### Pending Todos
 
@@ -114,6 +118,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-29T20:17:54.387Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-metadata-editing/04-CONTEXT.md
+Last session: 2026-03-30T09:00:42Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: .planning/phases/04-metadata-editing/04-02-PLAN.md

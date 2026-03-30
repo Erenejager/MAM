@@ -14,9 +14,9 @@
 ### Metadata
 
 - [x] **META-01**: System auto-extracts duration, codec, resolution, frame rate, and file size on import (via ffprobe)
-- [ ] **META-02**: User can edit title and description per asset
-- [ ] **META-03**: User can add and remove tags (multi-value) per asset
-- [ ] **META-04**: Admin can define global custom metadata fields applied to all assets
+- [x] **META-02**: User can edit title and description per asset
+- [x] **META-03**: User can add and remove tags (multi-value) per asset
+- [x] **META-04**: Admin can define global custom metadata fields applied to all assets
 
 ### Browse
 
@@ -86,9 +86,9 @@ Transcription is generated via **Groq API** (Whisper large-v3) as a background j
 | IMP-02 | Phase 2 | Complete |
 | IMP-03 | Phase 2 | Complete |
 | META-01 | Phase 2 | Complete |
-| META-02 | Phase 4 | Pending |
-| META-03 | Phase 4 | Pending |
-| META-04 | Phase 4 | Pending |
+| META-02 | Phase 4 | Complete |
+| META-03 | Phase 4 | Complete |
+| META-04 | Phase 4 | Complete |
 | BRWS-01 | Phase 3 | Complete |
 | BRWS-02 | Phase 2 | Pending |
 | BRWS-03 | Phase 3 | Complete |
