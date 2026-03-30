@@ -110,6 +110,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Foundation | 4/4 | Complete   | 2026-03-22 |
 | 2. Ingest Pipeline | 3/3 | Complete   | 2026-03-26 |
 | 3. Browse and Playback | 1/4 | In Progress|  |
-| 4. Metadata Editing | 1/3 | In Progress|  |
+| 4. Metadata Editing | 2/3 | In Progress|  |
 | 5. Transcript Viewer | 0/TBD | Not started | - |
 | 6. Search | 0/TBD | Not started | - |
