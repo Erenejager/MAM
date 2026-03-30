@@ -1,14 +1,18 @@
+import React from 'react';
 import { Film } from 'lucide-react';
 import { cn } from '../../lib/cn';
-import type { Asset } from '../../types/asset';
+import type { Asset, SearchResult } from '../../types/asset';
 import { formatDuration, formatFileSize, formatDate } from '../../lib/formatters';
 import { StatusBadge } from './StatusBadge';
+import { TranscriptExcerpt } from './TranscriptExcerpt';
 
 interface AssetCardProps {
   asset: Asset;
   isSelected: boolean;
   onSelect: (id: string) => void;
   onContextMenu: (e: React.MouseEvent, id: string) => void;
+  searchResult?: SearchResult;
+  onTimecodeClick?: (assetId: string, timestamp: number) => void;
 }
 
 function formatResolution(height: number | null): string {
@@ -28,7 +32,22 @@ function parseTags(tagsJson: string): string[] {
   }
 }
 
-export function AssetCard({ asset, isSelected, onSelect, onContextMenu }: AssetCardProps) {
+function renderHighlight(text: string): React.ReactNode {
+  const parts = text.split(/(<em>.*?<\/em>)/);
+  return parts.map((part, i) => {
+    const match = part.match(/^<em>(.*?)<\/em>$/);
+    if (match) {
+      return (
+        <mark key={i} className="bg-amber-500/30 text-amber-200 rounded-sm px-0.5">
+          {match[1]}
+        </mark>
+      );
+    }
+    return part;
+  });
+}
+
+export function AssetCard({ asset, isSelected, onSelect, onContextMenu, searchResult, onTimecodeClick }: AssetCardProps) {
   const tags = parseTags(asset.tags);
   const title = asset.title || asset.originalFilename;
 
@@ -45,13 +64,28 @@ export function AssetCard({ asset, isSelected, onSelect, onContextMenu }: AssetC
     codecResolution || null,
   ].filter(Boolean);
 
+  const titleHighlight = searchResult?.highlights?.title?.[0];
+  const descHighlight = searchResult?.highlights?.description?.[0];
+  // Check if a tag is highlighted by looking for it in title/description highlights
+  function isTagHighlighted(tag: string): boolean {
+    const allHighlights = [
+      ...(searchResult?.highlights?.title ?? []),
+      ...(searchResult?.highlights?.description ?? []),
+    ];
+    const lowerTag = tag.toLowerCase();
+    return allHighlights.some(h => {
+      const plain = h.replace(/<\/?em>/g, '').toLowerCase();
+      return plain.includes(lowerTag);
+    });
+  }
+
   return (
     <div
       className={cn(
         'flex bg-panel rounded-lg border cursor-pointer transition-colors duration-200',
         isSelected
-          ? 'border-cta/50'
-          : 'border-border hover:border-border-hover'
+          ? 'border-cta shadow-accent'
+          : 'border-border hover:border-border-hover hover:shadow-md'
       )}
       onClick={() => onSelect(asset.id)}
       onContextMenu={(e) => {
@@ -78,7 +112,16 @@ export function AssetCard({ asset, isSelected, onSelect, onContextMenu }: AssetC
       {/* Info */}
       <div className="flex-1 p-3 flex flex-col gap-1 min-w-0">
         {/* Row 1: Title */}
-        <h3 className="text-text font-semibold text-sm truncate">{title}</h3>
+        <h3 className="text-text font-semibold text-sm truncate">
+          {titleHighlight ? renderHighlight(titleHighlight) : title}
+        </h3>
+
+        {/* Row 1b: Description highlight (only when searching) */}
+        {descHighlight && (
+          <p className="text-xs text-text-muted truncate">
+            {renderHighlight(descHighlight)}
+          </p>
+        )}
 
         {/* Row 2: Metadata */}
         <p className="text-xs text-text-muted truncate">
@@ -92,15 +135,25 @@ export function AssetCard({ asset, isSelected, onSelect, onContextMenu }: AssetC
 
         {/* Row 3: Tags */}
         {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 max-h-[3.25rem] overflow-hidden">
-            {tags.map((tag) => (
+          <div className="flex flex-wrap gap-1">
+            {tags.slice(0, 6).map((tag) => (
               <span
                 key={tag}
-                className="inline-flex text-xs px-2 py-0.5 rounded-full bg-background/50 text-text-muted border border-border"
+                className={cn(
+                  'inline-flex text-xs px-2 py-0.5 rounded-full border',
+                  isTagHighlighted(tag)
+                    ? 'bg-amber-500/20 text-amber-200 border-amber-500/40'
+                    : 'bg-background/50 text-text-muted border-border'
+                )}
               >
                 {tag}
               </span>
             ))}
+            {tags.length > 6 && (
+              <span className="inline-flex text-xs px-2 py-0.5 rounded-full text-text-muted">
+                +{tags.length - 6}
+              </span>
+            )}
           </div>
         )}
 
@@ -112,6 +165,16 @@ export function AssetCard({ asset, isSelected, onSelect, onContextMenu }: AssetC
             transcriptionStatus={asset.transcriptionStatus}
           />
         </div>
+
+        {/* Transcript excerpt (search only) */}
+        {searchResult?.transcriptMatch && (
+          <TranscriptExcerpt
+            text={searchResult.transcriptMatch.text}
+            timestamp={searchResult.transcriptMatch.timestamp}
+            matchCount={searchResult.transcriptMatch.matchCount}
+            onTimecodeClick={(ts) => onTimecodeClick?.(asset.id, ts)}
+          />
+        )}
       </div>
     </div>
   );

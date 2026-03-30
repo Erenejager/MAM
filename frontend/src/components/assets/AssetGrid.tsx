@@ -1,21 +1,22 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Film } from 'lucide-react';
+import { Film, Search } from 'lucide-react';
 import { useAssets } from '../../hooks/useAssets';
 import { AssetCard } from './AssetCard';
 import { AssetContextMenu } from './AssetContextMenu';
 import { DeleteDialog } from '../shared/DeleteDialog';
+import type { SearchResult } from '../../types/asset';
 
 interface AssetGridProps {
   selectedTags: string[];
   selectedAssetId: string | null;
   onSelectAsset: (id: string | null) => void;
   searchQuery?: string;
-  searchResults?: Map<string, import('../../types/asset').SearchResult>;
+  searchResults?: Map<string, SearchResult>;
   onTimecodeClick?: (assetId: string, timestamp: number) => void;
 }
 
-export function AssetGrid({ selectedTags, selectedAssetId, onSelectAsset }: AssetGridProps) {
+export function AssetGrid({ selectedTags, selectedAssetId, onSelectAsset, searchQuery, searchResults, onTimecodeClick }: AssetGridProps) {
   const { data: assets, isLoading } = useAssets(
     selectedTags.length > 0 ? selectedTags : undefined
   );
@@ -30,6 +31,20 @@ export function AssetGrid({ selectedTags, selectedAssetId, onSelectAsset }: Asse
     id: string;
     title: string;
   } | null>(null);
+
+  const isSearchActive = !!(searchQuery && searchQuery.trim().length > 0);
+
+  const displayAssets = useMemo(() => {
+    if (!assets) return [];
+    if (!isSearchActive || !searchResults) return assets;
+    return assets
+      .filter(a => searchResults.has(a.id))
+      .sort((a, b) => {
+        const scoreA = searchResults.get(a.id)?.score ?? 0;
+        const scoreB = searchResults.get(b.id)?.score ?? 0;
+        return scoreB - scoreA;
+      });
+  }, [assets, isSearchActive, searchResults]);
 
   const handleContextMenu = (e: React.MouseEvent, assetId: string) => {
     setContextMenu({ x: e.clientX, y: e.clientY, assetId });
@@ -64,6 +79,29 @@ export function AssetGrid({ selectedTags, selectedAssetId, onSelectAsset }: Asse
     );
   }
 
+  // Search active but still loading results
+  if (isSearchActive && !searchResults) {
+    return (
+      <div className="p-4 flex flex-col gap-3">
+        <div className="flex items-center gap-2 text-text-muted text-sm px-2 py-4">
+          <Search className="w-4 h-4 animate-pulse" />
+          Searching...
+        </div>
+      </div>
+    );
+  }
+
+  // Search returned no results
+  if (isSearchActive && searchResults && displayAssets.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-text-muted gap-3">
+        <Search className="w-12 h-12" />
+        <p className="text-sm">No videos match &lsquo;{searchQuery}&rsquo;</p>
+        <p className="text-xs">Try different search terms</p>
+      </div>
+    );
+  }
+
   if (!assets || assets.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-text-muted gap-3">
@@ -77,7 +115,7 @@ export function AssetGrid({ selectedTags, selectedAssetId, onSelectAsset }: Asse
     <>
       <div className="p-4 flex flex-col gap-3">
         <AnimatePresence>
-          {assets.map((asset) => (
+          {displayAssets.map((asset) => (
             <motion.div
               key={asset.id}
               layout
@@ -89,6 +127,8 @@ export function AssetGrid({ selectedTags, selectedAssetId, onSelectAsset }: Asse
                 isSelected={asset.id === selectedAssetId}
                 onSelect={onSelectAsset}
                 onContextMenu={handleContextMenu}
+                searchResult={searchResults?.get(asset.id)}
+                onTimecodeClick={onTimecodeClick}
               />
             </motion.div>
           ))}

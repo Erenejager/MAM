@@ -16,7 +16,7 @@ interface DetailPanelProps {
   onOpened?: () => void;
 }
 
-export function DetailPanel({ assetId, onClose }: DetailPanelProps) {
+export function DetailPanel({ assetId, onClose, initialTab, seekTimestamp, onOpened }: DetailPanelProps) {
   const { data: asset, isLoading, error } = useAsset(assetId);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [activeTab, setActiveTab] = useState<'info' | 'transcript'>('info');
@@ -36,6 +36,24 @@ export function DetailPanel({ assetId, onClose }: DetailPanelProps) {
       .catch(() => setSegments([]))
       .finally(() => setTranscriptLoading(false));
   }, [asset?.id, asset?.transcriptionStatus]);
+
+  // Switch tab when initialTab changes (e.g., from timecode click)
+  useEffect(() => {
+    if (initialTab) setActiveTab(initialTab);
+  }, [initialTab]);
+
+  // Seek video when seekTimestamp is provided
+  useEffect(() => {
+    if (seekTimestamp == null) return;
+    // Use setTimeout to ensure tab switch and video mount have completed
+    const timer = setTimeout(() => {
+      if (videoRef.current) {
+        videoRef.current.currentTime = seekTimestamp;
+      }
+      onOpened?.();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [seekTimestamp, onOpened]);
 
   // Close on Escape
   useEffect(() => {
