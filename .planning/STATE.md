@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Phase 5 context gathered
-last_updated: "2026-03-30T10:52:07.005Z"
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-30T14:32:07.637Z"
 progress:
   total_phases: 6
-  completed_phases: 4
-  total_plans: 15
-  completed_plans: 15
+  completed_phases: 5
+  total_plans: 16
+  completed_plans: 16
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Find any video in your library instantly — by title, keyword, tag, or spoken word in the transcript.
-**Current focus:** Phase 03 — browse-and-playback
+**Current focus:** Phase 05 — transcript-viewer
 
 ## Current Position
 
-Phase: 03 (browse-and-playback) — COMPLETE
-Plan: 5 of 5
+Phase: 05 (transcript-viewer) — COMPLETE
+Plan: 1 of 1 (done)
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Plan: 5 of 5
 | Phase 04 P02 | 3 | 3 tasks | 6 files |
 | Phase 04-metadata-editing P03 | 4 | 3 tasks | 6 files |
 | Phase 03 P05 | 1 | 2 tasks | 3 files |
+| Phase 05 P01 | 5 | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -111,6 +112,9 @@ Plan: 5 of 5
 - [Phase 04]: TagEditor uses local state synced from props for optimistic updates with revert-on-error
 - [Phase 04]: View switching via useState in App.tsx — no react-router needed for two views
 - [Phase 03]: Explicit createdAt at insert time instead of migration fix -- avoids db:generate/db:migrate cycle
+- [Phase 05]: Lifted transcript fetch from TranscriptList to DetailPanel for cross-tab state sharing
+- [Phase 05]: Search highlight uses split+mark pattern (not dangerouslySetInnerHTML) for XSS safety
+- [Phase 05]: 3-second scroll suppression after search navigation prevents playback auto-scroll from fighting user intent
 
 ### Pending Todos
 
@@ -125,6 +129,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-30T10:52:07.000Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-transcript-viewer/05-CONTEXT.md
+Last session: 2026-03-30T14:32:07.633Z
+Stopped at: Completed 05-01-PLAN.md
+Resume file: None
