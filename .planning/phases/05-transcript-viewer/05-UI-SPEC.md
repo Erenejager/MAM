@@ -33,7 +33,7 @@ Declared values (must be multiples of 4):
 |-------|-------|-------|
 | xs | 4px | Icon gaps, inline padding |
 | sm | 8px | Compact element spacing, segment vertical padding |
-| md | 16px | Default element spacing, panel padding |
+| md | 16px | Default element spacing, panel padding, search input horizontal padding, segment horizontal padding |
 | lg | 24px | Section padding, gap between video and tabs |
 | xl | 32px | Layout gaps |
 | 2xl | 48px | Major section breaks |
@@ -83,6 +83,8 @@ Match highlight details:
 - Current match (navigated-to): `bg-amber-500/50 text-amber-100` (stronger amber for the focused match)
 - Amber chosen for contrast against Cinema Dark navy backgrounds and to not conflict with the CTA red accent
 
+Visual anchor: Primary visual anchor is the active transcript segment (CTA left border + `bg-cta/20` tint). Secondary anchor is the tab bar with active CTA underline indicator.
+
 ---
 
 ## Component Inventory
@@ -121,7 +123,7 @@ Placement: Between VideoPlayer and content area (inside DetailPanel's scrollable
 | Placement | Sticky at top of transcript panel, above the segment list |
 | Background | `bg-background` (`#0F0F23`) |
 | Border | 1px `border-border`, 8px border-radius |
-| Padding | `px-3 py-2` (12px horizontal, 8px vertical) |
+| Padding | `px-4 py-2` (16px horizontal, 8px vertical) |
 | Font | 14px Fira Sans, weight 400 |
 | Placeholder | "Search transcript..." |
 | Icon | Lucide `Search` icon (16px), `text-text-muted`, left side |
@@ -140,7 +142,7 @@ Placement: Between VideoPlayer and content area (inside DetailPanel's scrollable
 |----------|-------|
 | Element | `<button>` (preserves click-to-seek) |
 | Width | Full width, `text-left` |
-| Padding | `px-3 py-2` |
+| Padding | `px-4 py-2` (16px horizontal, 8px vertical) |
 | Font | 14px Fira Sans body, 12px Fira Code timecode |
 | Active state | `bg-cta/20 border-l-2 border-cta text-text` (unchanged from current) |
 | Inactive state | `text-text-muted hover:bg-background/50` (unchanged from current) |
