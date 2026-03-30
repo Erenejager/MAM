@@ -99,7 +99,10 @@ Plans:
   2. User can search for a word spoken in a video and see results that include transcript excerpt snippets with highlighted matching text
   3. User can click a timecode link in a transcript search result and the video player opens at that exact moment
   4. User can filter search results by clicking a tag — results narrow to only assets with that tag
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 06-01-PLAN.md — Backend search endpoint + tests, frontend search types/hook/API
+- [ ] 06-02-PLAN.md — Frontend search UI (SearchInput, card highlights, transcript excerpts, timecode deep-links)
 
 ## Progress
 
@@ -113,4 +116,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Browse and Playback | 4/5 | In Progress|  |
 | 4. Metadata Editing | 3/3 | Complete   | 2026-03-30 |
 | 5. Transcript Viewer | 0/TBD | Not started | - |
-| 6. Search | 0/TBD | Not started | - |
+| 6. Search | 0/2 | Not started | - |
