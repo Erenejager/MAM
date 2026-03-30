@@ -68,6 +68,7 @@ export async function assetRoutes(fastify: FastifyInstance): Promise<void> {
           fileHash,
           status: 'ingesting',
           title: file.filename.replace(/\.[^.]+$/, ''),
+          createdAt: new Date().toISOString(),
           metadataStatus: 'pending',
           thumbnailStatus: 'pending',
           transcriptionStatus: 'pending',

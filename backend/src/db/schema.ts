@@ -1,4 +1,5 @@
 import { sqliteTable, text, integer, real, primaryKey } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
 
 export const assets = sqliteTable('assets', {
   id: text('id').primaryKey(),                          // UUID
@@ -37,15 +38,15 @@ export const assets = sqliteTable('assets', {
   description: text('description'),
   tags: text('tags').default('[]'),                     // JSON array
 
-  createdAt: text('created_at').default("(datetime('now'))"),
-  updatedAt: text('updated_at').default("(datetime('now'))"),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+  updatedAt: text('updated_at').default(sql`(datetime('now'))`),
 });
 
 export const customFields = sqliteTable('custom_fields', {
   id: text('id').primaryKey(),
   name: text('name').notNull().unique(),
   fieldType: text('field_type').default('text'),        // text | number | date | boolean
-  createdAt: text('created_at').default("(datetime('now'))"),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
 });
 
 export const assetCustomValues = sqliteTable('asset_custom_values', {
