@@ -1,3 +1,4 @@
+import { Settings } from 'lucide-react';
 import type { TagCount } from '../../types/asset';
 import { cn } from '../../lib/cn';
 
@@ -6,9 +7,11 @@ interface SidebarProps {
   selectedTags: string[];
   onToggleTag: (tag: string) => void;
   isLoading: boolean;
+  onNavigate: (view: 'library' | 'settings') => void;
+  activeView: 'library' | 'settings';
 }
 
-export function Sidebar({ tags, selectedTags, onToggleTag, isLoading }: SidebarProps) {
+export function Sidebar({ tags, selectedTags, onToggleTag, isLoading, onNavigate, activeView }: SidebarProps) {
   return (
     <div className="flex flex-col h-full">
       <div className="px-4 py-3 shrink-0">
@@ -60,6 +63,20 @@ export function Sidebar({ tags, selectedTags, onToggleTag, isLoading }: SidebarP
               })}
           </ul>
         )}
+      </div>
+      <div className="border-t border-border mt-auto">
+        <button
+          onClick={() => onNavigate(activeView === 'settings' ? 'library' : 'settings')}
+          className={cn(
+            'w-full flex items-center gap-2 px-4 py-2 text-sm cursor-pointer transition-colors duration-150',
+            activeView === 'settings'
+              ? 'bg-background/50 text-cta'
+              : 'text-text-muted hover:text-text hover:bg-background/50'
+          )}
+        >
+          <Settings className="w-4 h-4" />
+          Settings
+        </button>
       </div>
     </div>
   );
