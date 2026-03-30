@@ -17,3 +17,23 @@ body {
   color: #F8FAFC;
   font-family: 'Fira Sans', sans-serif;
 }
+
+/* Global focus-visible — CTA accent for keyboard navigation */
+*:focus-visible {
+  outline: 2px solid #E11D48;
+  outline-offset: 2px;
+}
+
+/* Respect user motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Reset native mark styling for Cinema Dark search highlights */
+mark {
+  background: transparent;
+  color: inherit;
+}
