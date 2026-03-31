@@ -16,7 +16,7 @@ export interface Asset {
   thumbnailStatus: string;
   transcriptPath: string | null;
   transcriptText: string | null;
-  transcriptionStatus: 'pending' | 'processing' | 'ready' | 'failed';
+  transcriptionStatus: 'pending' | 'processing' | 'ready' | 'complete' | 'failed';
   transcriptionError: string | null;
   searchIndexStatus: string;
   title: string | null;
@@ -56,6 +56,11 @@ export interface SearchTranscriptMatch {
   matchCount: number;    // approximate total transcript matches
 }
 
+export interface SearchTranscriptMatchItem {
+  text: string;
+  timestamp: number;
+}
+
 export interface SearchResult {
   id: string;
   score: number;
@@ -65,6 +70,7 @@ export interface SearchResult {
     transcript?: string[];
   };
   transcriptMatch?: SearchTranscriptMatch;
+  transcriptMatches?: SearchTranscriptMatchItem[];
 }
 
 export interface SearchResponse {

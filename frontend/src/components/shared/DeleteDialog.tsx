@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useDeleteAsset } from '../../hooks/useAssets';
 
 interface DeleteDialogProps {
@@ -11,14 +11,49 @@ interface DeleteDialogProps {
 export function DeleteDialog({ assetId, assetTitle, onClose, onDeleted }: DeleteDialogProps) {
   const deleteMutation = useDeleteAsset();
   const isDeleting = deleteMutation.isPending;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  // Save and restore focus
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement as HTMLElement;
+    return () => {
+      previousFocusRef.current?.focus();
+    };
+  }, []);
+
+  // Auto-focus first button on mount
+  useEffect(() => {
+    const firstButton = dialogRef.current?.querySelector('button');
+    firstButton?.focus();
+  }, []);
+
+  // Focus trap + Escape
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      onClose();
+      return;
+    }
+    if (e.key !== 'Tab' || !dialogRef.current) return;
+    const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+      'button:not([disabled])'
+    );
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }, [onClose]);
 
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, [onClose]);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   const handleDelete = (deleteFile: boolean) => {
     deleteMutation.mutate(
@@ -34,10 +69,14 @@ export function DeleteDialog({ assetId, assetTitle, onClose, onDeleted }: Delete
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Delete asset"
     >
       <div
+        ref={dialogRef}
         className="bg-panel border border-border rounded-lg shadow-lg p-6 max-w-md w-full"
         onClick={(e) => e.stopPropagation()}
       >

@@ -1,24 +1,24 @@
+import { forwardRef } from 'react';
 import type { Asset } from '../../types/asset';
 
 interface VideoPlayerProps {
   asset: Asset;
-  videoRef: React.RefObject<HTMLVideoElement>;
 }
 
-export function VideoPlayer({ asset, videoRef }: VideoPlayerProps) {
-  const videoSrc = `/storage/${asset.filepath}`;
-  const posterSrc = asset.thumbnailPath ? `/storage/${asset.id}/thumbnail.jpg` : undefined;
+export const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
+  function VideoPlayer({ asset }, ref) {
+    const posterUrl = asset.thumbnailPath
+      ? `/storage/${asset.id}/thumbnail.jpg`
+      : undefined;
 
-  return (
-    <div className="w-full bg-black rounded overflow-hidden">
+    return (
       <video
-        ref={videoRef}
-        src={videoSrc}
-        poster={posterSrc}
+        ref={ref}
+        src={`/storage/${asset.filepath}`}
+        poster={posterUrl}
         controls
-        preload="metadata"
-        className="w-full aspect-video"
+        className="max-w-full max-h-full"
       />
-    </div>
-  );
-}
+    );
+  }
+);
