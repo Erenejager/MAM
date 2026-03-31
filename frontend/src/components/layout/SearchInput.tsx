@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 
 interface SearchInputProps {
@@ -31,6 +31,8 @@ export function SearchInput({ onSearch, onClear, initialValue = '' }: SearchInpu
     const trimmed = value.trim();
     if (trimmed) {
       onSearch(trimmed);
+    } else {
+      onClear();
     }
   }
 
@@ -41,23 +43,28 @@ export function SearchInput({ onSearch, onClear, initialValue = '' }: SearchInpu
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex-1 max-w-xl mx-auto relative">
-      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none" />
+    <form onSubmit={handleSubmit} className="relative w-full">
+      <Search
+        size={14}
+        className="absolute left-sm top-1/2 -translate-y-1/2 text-text-dim pointer-events-none"
+      />
       <input
         ref={inputRef}
         type="text"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder="Search videos... (Ctrl+K)"
-        className="w-full bg-background border border-border rounded-lg pl-10 pr-10 py-1.5 text-sm text-text placeholder:text-text-muted focus:outline-none focus:border-cta"
+        placeholder="Search assets..."
+        className="w-full bg-background/60 border border-border rounded py-xs pl-xl pr-xl text-sm text-text placeholder:text-text-dim focus:border-cta focus:outline-none transition-colors"
+        aria-label="Search assets"
       />
       {value && (
         <button
           type="button"
           onClick={handleClear}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text"
+          className="absolute right-sm top-1/2 -translate-y-1/2 text-text-dim hover:text-text transition-colors"
+          aria-label="Clear search"
         >
-          <X className="w-4 h-4" />
+          <X size={14} />
         </button>
       )}
     </form>
