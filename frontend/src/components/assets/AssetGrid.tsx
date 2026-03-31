@@ -13,10 +13,13 @@ interface AssetGridProps {
   onSelectAsset: (id: string | null) => void;
   searchQuery?: string;
   searchResults?: Map<string, SearchResult>;
+  isSearchActive?: boolean;
   onTimecodeClick?: (assetId: string, timestamp: number) => void;
+  onToggleTag?: (tag: string) => void;
+  onClearTags?: () => void;
 }
 
-export function AssetGrid({ selectedTags, selectedAssetId, onSelectAsset, searchQuery, searchResults, onTimecodeClick }: AssetGridProps) {
+export function AssetGrid({ selectedTags, selectedAssetId, onSelectAsset, searchQuery, searchResults, isSearchActive: isSearchActiveProp, onTimecodeClick, onToggleTag: _onToggleTag, onClearTags: _onClearTags }: AssetGridProps) {
   const { data: assets, isLoading } = useAssets(
     selectedTags.length > 0 ? selectedTags : undefined
   );
@@ -32,7 +35,7 @@ export function AssetGrid({ selectedTags, selectedAssetId, onSelectAsset, search
     title: string;
   } | null>(null);
 
-  const isSearchActive = !!(searchQuery && searchQuery.trim().length > 0);
+  const isSearchActive = isSearchActiveProp ?? !!(searchQuery && searchQuery.trim().length > 0);
 
   const displayAssets = useMemo(() => {
     if (!assets) return [];
