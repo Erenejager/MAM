@@ -38,8 +38,8 @@ function highlightText(
           className={cn(
             'rounded-sm px-0.5',
             isCurrent
-              ? 'bg-amber-500/50 text-amber-100'
-              : 'bg-amber-500/30 text-amber-200'
+              ? 'bg-cta/40 text-text'
+              : 'bg-cta/20 text-text'
           )}
         >
           {part}

@@ -20,7 +20,7 @@ function renderHighlight(html: string) {
     const match = part.match(/^<em>(.*)<\/em>$/);
     if (match) {
       return (
-        <mark key={i} className="bg-amber-500/30 text-amber-200 rounded-sm px-[2px]">
+        <mark key={i} className="bg-cta/25 text-text rounded-sm px-[2px]">
           {match[1]}
         </mark>
       );

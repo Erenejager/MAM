@@ -109,7 +109,7 @@ export function TopBar({
 
       {/* Search unavailable banner */}
       {searchUnavailable && (
-        <div className="absolute top-full left-0 right-0 bg-amber-900/30 text-amber-200 text-xs text-center py-xs px-md border-b border-amber-800/30 z-40">
+        <div className="absolute top-full left-0 right-0 bg-cta/10 text-cta text-xs text-center py-xs px-md border-b border-cta/20 z-40">
           Search unavailable — showing all assets
         </div>
       )}
