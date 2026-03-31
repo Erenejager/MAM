@@ -1,20 +1,21 @@
-import React from 'react';
 import { formatTimecode } from '../../lib/formatters';
+import type { SearchTranscriptMatchItem } from '../../types/asset';
 
 interface TranscriptExcerptProps {
-  text: string;           // highlight fragment with <em> tags from OpenSearch
-  timestamp: number;      // seconds
-  matchCount: number;     // total matches for badge
+  text: string;
+  timestamp: number;
+  matchCount: number;
+  matches?: SearchTranscriptMatchItem[];
   onTimecodeClick: (timestamp: number) => void;
 }
 
-function renderHighlight(text: string): React.ReactNode {
-  const parts = text.split(/(<em>.*?<\/em>)/);
+function renderExcerpt(html: string) {
+  const parts = html.split(/(<em>.*?<\/em>)/g);
   return parts.map((part, i) => {
-    const match = part.match(/^<em>(.*?)<\/em>$/);
+    const match = part.match(/^<em>(.*)<\/em>$/);
     if (match) {
       return (
-        <mark key={i} className="bg-amber-500/30 text-amber-200 rounded-sm px-0.5">
+        <mark key={i} className="bg-amber-500/30 text-amber-200 rounded-sm px-[2px]">
           {match[1]}
         </mark>
       );
@@ -23,25 +24,37 @@ function renderHighlight(text: string): React.ReactNode {
   });
 }
 
-export function TranscriptExcerpt({ text, timestamp, matchCount, onTimecodeClick }: TranscriptExcerptProps) {
+export function TranscriptExcerpt({
+  text,
+  timestamp,
+  matchCount,
+  matches,
+  onTimecodeClick,
+}: TranscriptExcerptProps) {
+  const allMatches = matches && matches.length > 0 ? matches : [{ text, timestamp }];
+
   return (
-    <div className="mt-2 pt-2 border-t border-border">
-      <p className="text-xs text-text-muted italic">
-        &ldquo;...{renderHighlight(text)}...&rdquo;
+    <div className="bg-panel/80 backdrop-blur-sm rounded px-sm py-xs border border-border">
+      <p className="text-[11px] text-text-muted leading-relaxed line-clamp-2">
+        {renderExcerpt(allMatches[0].text)}
       </p>
-      <div className="flex items-center gap-2 mt-1">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onTimecodeClick(timestamp);
-          }}
-          className="text-xs text-cta hover:text-cta/80 font-mono cursor-pointer"
-        >
-          {formatTimecode(timestamp)}
-        </button>
-        {matchCount > 1 && (
-          <span className="text-xs text-text-muted">
-            {matchCount} matches
+      <div className="flex items-center gap-xs mt-xs flex-wrap">
+        {allMatches.slice(0, 3).map((m, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onTimecodeClick(m.timestamp);
+            }}
+            className="text-[10px] font-mono text-cta hover:text-cta-hover transition-colors"
+          >
+            {formatTimecode(m.timestamp)}
+          </button>
+        ))}
+        {matchCount > 3 && (
+          <span className="text-[10px] text-text-dim">
+            +{matchCount - 3} more
           </span>
         )}
       </div>

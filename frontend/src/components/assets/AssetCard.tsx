@@ -1,10 +1,9 @@
-import React from 'react';
 import { Film } from 'lucide-react';
 import { cn } from '../../lib/cn';
-import type { Asset, SearchResult } from '../../types/asset';
-import { formatDuration, formatFileSize, formatDate } from '../../lib/formatters';
+import { formatDuration, formatFileSize } from '../../lib/formatters';
 import { StatusBadge } from './StatusBadge';
 import { TranscriptExcerpt } from './TranscriptExcerpt';
+import type { Asset, SearchResult } from '../../types/asset';
 
 interface AssetCardProps {
   asset: Asset;
@@ -15,30 +14,13 @@ interface AssetCardProps {
   onTimecodeClick?: (assetId: string, timestamp: number) => void;
 }
 
-function formatResolution(height: number | null): string {
-  if (!height) return '';
-  if (height >= 2160) return '4K';
-  if (height >= 1080) return '1080p';
-  if (height >= 720) return '720p';
-  return `${height}p`;
-}
-
-function parseTags(tagsJson: string): string[] {
-  try {
-    const parsed = JSON.parse(tagsJson);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function renderHighlight(text: string): React.ReactNode {
-  const parts = text.split(/(<em>.*?<\/em>)/);
+function renderHighlight(html: string) {
+  const parts = html.split(/(<em>.*?<\/em>)/g);
   return parts.map((part, i) => {
-    const match = part.match(/^<em>(.*?)<\/em>$/);
+    const match = part.match(/^<em>(.*)<\/em>$/);
     if (match) {
       return (
-        <mark key={i} className="bg-amber-500/30 text-amber-200 rounded-sm px-0.5">
+        <mark key={i} className="bg-amber-500/30 text-amber-200 rounded-sm px-[2px]">
           {match[1]}
         </mark>
       );
@@ -47,135 +29,132 @@ function renderHighlight(text: string): React.ReactNode {
   });
 }
 
-export function AssetCard({ asset, isSelected, onSelect, onContextMenu, searchResult, onTimecodeClick }: AssetCardProps) {
-  const tags = parseTags(asset.tags);
-  const title = asset.title || asset.originalFilename;
-
-  const codecResolution = [
-    asset.codec ?? '',
-    formatResolution(asset.height),
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-  const metaParts = [
-    formatDuration(asset.durationSeconds),
-    formatFileSize(asset.fileSize),
-    codecResolution || null,
-  ].filter(Boolean);
-
+export function AssetCard({
+  asset,
+  isSelected,
+  onSelect,
+  onContextMenu,
+  searchResult,
+  onTimecodeClick,
+}: AssetCardProps) {
+  const tags: string[] = asset.tags ? JSON.parse(asset.tags) : [];
   const titleHighlight = searchResult?.highlights?.title?.[0];
-  const descHighlight = searchResult?.highlights?.description?.[0];
-  // Check if a tag is highlighted by looking for it in title/description highlights
-  function isTagHighlighted(tag: string): boolean {
-    const allHighlights = [
-      ...(searchResult?.highlights?.title ?? []),
-      ...(searchResult?.highlights?.description ?? []),
-    ];
-    const lowerTag = tag.toLowerCase();
-    return allHighlights.some(h => {
-      const plain = h.replace(/<\/?em>/g, '').toLowerCase();
-      return plain.includes(lowerTag);
-    });
+  const displayTitle = titleHighlight
+    ? renderHighlight(titleHighlight)
+    : asset.title || asset.originalFilename;
+
+  const meta: string[] = [];
+  if (asset.durationSeconds) meta.push(formatDuration(asset.durationSeconds));
+  if (asset.fileSize) meta.push(formatFileSize(asset.fileSize));
+  if (asset.codec && asset.width && asset.height) {
+    meta.push(`${asset.codec.toUpperCase()} ${asset.width}x${asset.height}`);
   }
 
   return (
-    <div
-      className={cn(
-        'flex bg-panel rounded-lg border cursor-pointer transition-colors duration-200',
-        isSelected
-          ? 'border-cta shadow-accent'
-          : 'border-border hover:border-border-hover hover:shadow-md'
-      )}
+    <article
+      role="button"
+      tabIndex={0}
       onClick={() => onSelect(asset.id)}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        onContextMenu(e, asset.id);
+      onContextMenu={(e) => onContextMenu(e, asset.id)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect(asset.id);
+        }
       }}
+      className={cn(
+        'group relative rounded-lg overflow-hidden cursor-pointer transition-all duration-200',
+        'aspect-video',
+        isSelected
+          ? 'ring-1 ring-cta/40'
+          : 'hover:scale-[1.01] hover:shadow-card-hover'
+      )}
+      style={
+        isSelected
+          ? {
+              background: 'linear-gradient(135deg, rgba(225,29,72,0.08), transparent, rgba(225,29,72,0.04))',
+              backgroundSize: '300% 300%',
+              animation: 'border-shimmer 3s linear infinite, glow-pulse 2s ease-in-out infinite',
+            }
+          : undefined
+      }
+      aria-selected={isSelected}
     >
-      {/* Thumbnail */}
-      <div className="w-[260px] shrink-0 aspect-video bg-background rounded-l-lg overflow-hidden">
-        {asset.thumbnailPath ? (
-          <img
-            src={`/storage/${asset.id}/thumbnail.jpg`}
-            alt=""
-            className="w-full h-full object-cover"
-            loading="lazy"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <Film className="w-8 h-8 text-text-muted" />
-          </div>
+      {/* Thumbnail or placeholder */}
+      {asset.thumbnailPath ? (
+        <img
+          src={`/storage/${asset.id}/thumbnail.jpg`}
+          alt=""
+          loading="lazy"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      ) : (
+        <div className="absolute inset-0 bg-panel flex items-center justify-center">
+          <Film size={32} className="text-text-dim" />
+        </div>
+      )}
+
+      {/* Gradient overlay - bottom fade for readability */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+
+      {/* Top-left: status badge */}
+      <div className="absolute top-sm left-sm">
+        <StatusBadge
+          status={asset.status}
+          transcriptionStatus={asset.transcriptionStatus}
+        />
+      </div>
+
+      {/* Top-right: tags with frosted glass */}
+      {tags.length > 0 && (
+        <div className="absolute top-sm right-sm flex gap-xs flex-wrap justify-end max-w-[60%]">
+          {tags.slice(0, 3).map((tag) => (
+            <span
+              key={tag}
+              className="text-[10px] px-xs py-0 rounded bg-black/40 backdrop-blur-sm text-text-muted border border-border"
+            >
+              {tag}
+            </span>
+          ))}
+          {tags.length > 3 && (
+            <span className="text-[10px] px-xs py-0 rounded bg-black/40 backdrop-blur-sm text-text-dim">
+              +{tags.length - 3}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Bottom overlay: title + metadata */}
+      <div className="absolute bottom-0 left-0 right-0 p-sm">
+        <h3 className="text-sm font-semibold text-white truncate leading-tight">
+          {displayTitle}
+        </h3>
+        {meta.length > 0 && (
+          <p className="text-[11px] text-text-muted mt-0 truncate">
+            {meta.join(' \u00B7 ')}
+          </p>
         )}
       </div>
 
-      {/* Info */}
-      <div className="flex-1 p-3 flex flex-col gap-1 min-w-0">
-        {/* Row 1: Title */}
-        <h3 className="text-text font-semibold text-sm truncate">
-          {titleHighlight ? renderHighlight(titleHighlight) : title}
-        </h3>
-
-        {/* Row 1b: Description highlight (only when searching) */}
-        {descHighlight && (
-          <p className="text-xs text-text-muted truncate">
-            {renderHighlight(descHighlight)}
-          </p>
-        )}
-
-        {/* Row 2: Metadata */}
-        <p className="text-xs text-text-muted truncate">
-          {metaParts.map((part, i) => (
-            <span key={i}>
-              {i > 0 && <span className="mx-1">{'\u00B7'}</span>}
-              {part}
-            </span>
-          ))}
-        </p>
-
-        {/* Row 3: Tags */}
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {tags.slice(0, 6).map((tag) => (
-              <span
-                key={tag}
-                className={cn(
-                  'inline-flex text-xs px-2 py-0.5 rounded-full border',
-                  isTagHighlighted(tag)
-                    ? 'bg-amber-500/20 text-amber-200 border-amber-500/40'
-                    : 'bg-background/50 text-text-muted border-border'
-                )}
-              >
-                {tag}
-              </span>
-            ))}
-            {tags.length > 6 && (
-              <span className="inline-flex text-xs px-2 py-0.5 rounded-full text-text-muted">
-                +{tags.length - 6}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Row 4: Date + Status */}
-        <div className="flex justify-between items-center mt-auto">
-          <span className="text-xs text-text-muted">{formatDate(asset.createdAt)}</span>
-          <StatusBadge
-            status={asset.status}
-            transcriptionStatus={asset.transcriptionStatus}
-          />
+      {/* Duration badge - bottom right */}
+      {asset.durationSeconds && (
+        <div className="absolute bottom-sm right-sm bg-black/70 rounded px-xs py-0 text-[10px] font-mono text-text-muted">
+          {formatDuration(asset.durationSeconds)}
         </div>
+      )}
 
-        {/* Transcript excerpt (search only) */}
-        {searchResult?.transcriptMatch && (
+      {/* Transcript excerpt (shown below card when searching) */}
+      {searchResult?.transcriptMatch && onTimecodeClick && (
+        <div className="absolute -bottom-0 left-0 right-0 translate-y-full pt-xs">
           <TranscriptExcerpt
             text={searchResult.transcriptMatch.text}
             timestamp={searchResult.transcriptMatch.timestamp}
-            matchCount={searchResult.transcriptMatch.matchCount}
-            onTimecodeClick={(ts) => onTimecodeClick?.(asset.id, ts)}
+            matchCount={searchResult.transcriptMatches?.length ?? 1}
+            matches={searchResult.transcriptMatches}
+            onTimecodeClick={(ts) => onTimecodeClick(asset.id, ts)}
           />
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </article>
   );
 }
