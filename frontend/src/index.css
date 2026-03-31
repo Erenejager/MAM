@@ -3,37 +3,95 @@
 @tailwind utilities;
 
 :root {
-  --color-background: #0F0F23;
-  --color-panel: #1E1B4B;
+  --color-background: #0c0c12;
+  --color-background-deep: #09090e;
+  --color-panel: #141419;
+  --color-panel-light: #1a1a22;
   --color-cta: #E11D48;
-  --color-text: #F8FAFC;
-  --color-text-muted: #94A3B8;
-  --color-border: #2D2A5E;
+  --color-text: #e4e4e7;
+  --color-text-muted: #a1a1aa;
+  --color-text-dim: #52525b;
+  --color-border: rgba(255, 255, 255, 0.06);
 }
 
 body {
-  margin: 0;
-  background-color: #0F0F23;
-  color: #F8FAFC;
-  font-family: 'Fira Sans', sans-serif;
+  background: linear-gradient(170deg, #0c0c12 0%, #09090e 40%, #0b0b11 70%, #08080c 100%);
+  min-height: 100vh;
+  color: var(--color-text);
 }
 
-/* Global focus-visible — CTA accent for keyboard navigation */
 *:focus-visible {
   outline: 2px solid #E11D48;
   outline-offset: 2px;
 }
 
-/* Respect user motion preference */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }
 
-/* Reset native mark styling for Cinema Dark search highlights */
 mark {
   background: transparent;
   color: inherit;
+}
+
+/* Card top-light gradient overlay */
+.card-gradient {
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(255, 255, 255, 0.02) 40%,
+    transparent 100%
+  );
+}
+
+/* Lens flare keyframes */
+@keyframes flare-sweep-right {
+  0% { left: -20%; opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { left: 120%; opacity: 0; }
+}
+
+@keyframes flare-sweep-left {
+  0% { right: -20%; opacity: 0; }
+  20% { opacity: 0.6; }
+  80% { opacity: 0.6; }
+  100% { right: 120%; opacity: 0; }
+}
+
+@keyframes anamorphic-stretch {
+  0% { transform: scaleX(0); opacity: 0; }
+  30% { transform: scaleX(1); opacity: 0.4; }
+  70% { transform: scaleX(1.5); opacity: 0.2; }
+  100% { transform: scaleX(0); opacity: 0; }
+}
+
+/* Selection shimmer */
+@keyframes border-shimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(225,29,72,0.15); }
+  50% { box-shadow: 0 0 20px rgba(225,29,72,0.3); }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
