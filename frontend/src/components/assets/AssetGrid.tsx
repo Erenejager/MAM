@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { AssetCard } from './AssetCard';
 import { AssetContextMenu } from './AssetContextMenu';
 import { DeleteDialog } from '../shared/DeleteDialog';
+import { FilterBar } from '../layout/FilterBar';
 import { useAssets } from '../../hooks/useAssets';
 import type { SearchResult } from '../../types/asset';
 
@@ -24,6 +25,8 @@ export function AssetGrid({
   isSearchActive,
   onTimecodeClick,
   selectedTags,
+  onToggleTag,
+  onClearTags,
 }: AssetGridProps) {
   const { data: assets = [], isLoading } = useAssets(selectedTags.length > 0 ? selectedTags : undefined);
 
@@ -108,51 +111,58 @@ export function AssetGrid({
   }
 
   return (
-    <div className="p-lg overflow-y-auto h-full">
-      {/* Asset grid */}
-      <div className="grid grid-cols-3 gap-md">
-        <AnimatePresence mode="popLayout">
-          {displayAssets.map((asset) => (
-            <motion.div
-              key={asset.id}
-              layout
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.15 }}
-            >
-              <AssetCard
-                asset={asset}
-                isSelected={asset.id === selectedAssetId}
-                onSelect={(id) => onSelectAsset(id)}
-                onContextMenu={handleContextMenu}
-                searchResult={searchResults?.get(asset.id)}
-                onTimecodeClick={onTimecodeClick}
-              />
-            </motion.div>
-          ))}
-        </AnimatePresence>
+    <div className="h-full flex flex-col">
+      <FilterBar
+        selectedTags={selectedTags}
+        onToggleTag={onToggleTag}
+        onClearTags={onClearTags}
+      />
+      <div className="p-lg overflow-y-auto flex-1">
+        {/* Asset grid */}
+        <div className="grid grid-cols-3 gap-md">
+          <AnimatePresence mode="popLayout">
+            {displayAssets.map((asset) => (
+              <motion.div
+                key={asset.id}
+                layout
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.15 }}
+              >
+                <AssetCard
+                  asset={asset}
+                  isSelected={asset.id === selectedAssetId}
+                  onSelect={(id) => onSelectAsset(id)}
+                  onContextMenu={handleContextMenu}
+                  searchResult={searchResults?.get(asset.id)}
+                  onTimecodeClick={onTimecodeClick}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+
+        {/* Context menu */}
+        {contextMenu && (
+          <AssetContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            onClose={() => setContextMenu(null)}
+            onDelete={handleDeleteFromMenu}
+          />
+        )}
+
+        {/* Delete dialog */}
+        {deleteTarget && (
+          <DeleteDialog
+            assetId={deleteTarget.id}
+            assetTitle={deleteTarget.title}
+            onClose={() => setDeleteTarget(null)}
+            onDeleted={handleDeleted}
+          />
+        )}
       </div>
-
-      {/* Context menu */}
-      {contextMenu && (
-        <AssetContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          onClose={() => setContextMenu(null)}
-          onDelete={handleDeleteFromMenu}
-        />
-      )}
-
-      {/* Delete dialog */}
-      {deleteTarget && (
-        <DeleteDialog
-          assetId={deleteTarget.id}
-          assetTitle={deleteTarget.title}
-          onClose={() => setDeleteTarget(null)}
-          onDeleted={handleDeleted}
-        />
-      )}
     </div>
   );
 }

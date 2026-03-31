@@ -65,6 +65,8 @@ export default function App() {
             searchUnavailable={searchData?.error === 'search_unavailable'}
             onNavigate={handleNavigate}
             activeView={view}
+            selectedTags={selectedTags}
+            onToggleTag={toggleTag}
           />
         }
       >
@@ -89,6 +91,8 @@ export default function App() {
           searchUnavailable={searchData?.error === 'search_unavailable'}
           onNavigate={handleNavigate}
           activeView={view}
+          selectedTags={selectedTags}
+          onToggleTag={toggleTag}
         />
       }
     >
