@@ -5,6 +5,7 @@ import { AssetGrid } from './components/assets/AssetGrid';
 import { DetailPanel } from './components/detail/DetailPanel';
 import { ImportView } from './components/ImportView';
 import { SettingsPage } from './components/settings/SettingsPage';
+import { DropOverlay } from './components/upload/DropOverlay';
 import { useSearch } from './hooks/useSearch';
 import { useTagFilter } from './hooks/useTagFilter';
 import type { SearchResult } from './types/asset';
@@ -53,9 +54,33 @@ export default function App() {
     []
   );
 
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleGlobalDrop = useCallback(
+    async (file: File) => {
+      setIsUploading(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/assets', { method: 'POST', body: formData });
+        if (res.status === 202) {
+          // Switch to import view so user can see progress
+          setView('import');
+        }
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    []
+  );
+
+  const dropDisabled = isUploading || view === 'import';
+
   // Full-screen detail view replaces library content
   if (selectedAssetId && view === 'library') {
     return (
+      <>
+      <DropOverlay onFileDrop={handleGlobalDrop} disabled={dropDisabled} />
       <AppShell
         topBar={
           <TopBar
@@ -78,10 +103,13 @@ export default function App() {
           onOpened={() => setPendingSeek(null)}
         />
       </AppShell>
+      </>
     );
   }
 
   return (
+    <>
+    <DropOverlay onFileDrop={handleGlobalDrop} disabled={dropDisabled} />
     <AppShell
       topBar={
         <TopBar
@@ -111,5 +139,6 @@ export default function App() {
       {view === 'settings' && <SettingsPage />}
       {view === 'import' && <ImportView />}
     </AppShell>
+    </>
   );
 }
