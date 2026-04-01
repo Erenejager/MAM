@@ -44,6 +44,7 @@ export function AssetTableRow({
   onContextMenu,
 }: AssetTableRowProps) {
   const [hovering, setHovering] = useState(false);
+  const [popupCoords, setPopupCoords] = useState({ left: 8, top: 0 });
   const rowRef = useRef<HTMLDivElement>(null);
   const thumbRef = useRef<HTMLDivElement>(null);
 
@@ -93,8 +94,6 @@ export function AssetTableRow({
   const titleColor = (isSelected || hovering) ? '#e4e4e7' : '#a1a1aa';
   const metaColor = hovering ? '#a1a1aa' : '#52525b';
 
-  const thumbOffsetLeft = thumbRef.current?.offsetLeft ?? 8;
-  const rowOffsetTop = rowRef.current?.offsetTop ?? 0;
 
   return (
     <>
@@ -103,7 +102,13 @@ export function AssetTableRow({
         role="row"
         tabIndex={0}
         style={rowStyle}
-        onMouseEnter={() => setHovering(true)}
+        onMouseEnter={() => {
+          setPopupCoords({
+            left: thumbRef.current?.offsetLeft ?? 8,
+            top: rowRef.current?.offsetTop ?? 0,
+          });
+          setHovering(true);
+        }}
         onMouseLeave={() => setHovering(false)}
         onClick={() => onSelect(asset.id)}
         onContextMenu={(e) => onContextMenu(e, asset.id)}
@@ -135,7 +140,7 @@ export function AssetTableRow({
         {/* Title — flex:1 */}
         <div role="cell" style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
           <div style={{
-            fontSize: 10, fontWeight: 500, color: titleColor,
+            fontSize: 10, fontWeight: 600, color: titleColor,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
             {isIngesting ? '—' : (asset.title || asset.originalFilename)}
@@ -163,7 +168,7 @@ export function AssetTableRow({
 
         {/* Imported — 60px */}
         <div role="cell" style={{ width: 60, flexShrink: 0, paddingRight: 8 }}>
-          <div style={{ fontSize: 9, color: '#52525b' }}>
+          <div style={{ fontSize: 9, color: metaColor }}>
             {isIngesting ? '—' : formatRelativeDate(asset.createdAt)}
           </div>
         </div>
@@ -195,15 +200,13 @@ export function AssetTableRow({
         </div>
       </div>
 
-      {hovering && (
-        <ThumbnailPopup
-          assetId={asset.id}
-          durationSeconds={asset.durationSeconds}
-          visible={hovering}
-          thumbOffsetLeft={thumbOffsetLeft}
-          rowOffsetTop={rowOffsetTop}
-        />
-      )}
+      <ThumbnailPopup
+        assetId={asset.id}
+        durationSeconds={asset.durationSeconds}
+        visible={hovering}
+        thumbOffsetLeft={popupCoords.left}
+        rowOffsetTop={popupCoords.top}
+      />
     </>
   );
 }
