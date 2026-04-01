@@ -27,7 +27,7 @@ export function AssetGrid({
   selectedTags,
   onToggleTag: _onToggleTag,
   onClearTags: _onClearTags,
-  viewMode: _viewMode = 'grid',
+  viewMode = 'grid',
 }: AssetGridProps) {
   const { data: assets = [], isLoading } = useAssets(selectedTags.length > 0 ? selectedTags : undefined);
 
@@ -107,6 +107,32 @@ export function AssetGrid({
     return (
       <div className="flex items-center justify-center h-full text-text-dim">
         <p>No results found.</p>
+      </div>
+    );
+  }
+
+  if (viewMode === 'list') {
+    return (
+      <div className="h-full flex flex-col">
+        <div className="px-md pt-md pb-0 overflow-y-auto flex-1 flex flex-col">
+          <div className="text-text-dim text-xs">Table view coming soon…</div>
+        </div>
+        {contextMenu && (
+          <AssetContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            onClose={() => setContextMenu(null)}
+            onDelete={handleDeleteFromMenu}
+          />
+        )}
+        {deleteTarget && (
+          <DeleteDialog
+            assetId={deleteTarget.id}
+            assetTitle={deleteTarget.title}
+            onClose={() => setDeleteTarget(null)}
+            onDeleted={handleDeleted}
+          />
+        )}
       </div>
     );
   }
