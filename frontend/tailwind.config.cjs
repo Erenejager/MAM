@@ -31,6 +31,10 @@ module.exports = {
         'status-processing': '#F59E0B',
         'status-complete': '#10B981',
         'status-failed': '#E11D48',
+        glass: 'rgba(255,255,255,0.03)',
+        'glass-border': 'rgba(255,255,255,0.07)',
+        'glass-hover': 'rgba(255,255,255,0.06)',
+        'glass-strong': 'rgba(255,255,255,0.05)',
         /* shadcn/ui semantic tokens (CSS variable-backed) */
         foreground: 'var(--foreground)',
         card: {
@@ -94,5 +98,17 @@ module.exports = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    function({ addUtilities }) {
+      addUtilities({
+        '.glass-blur-sm': { 'backdrop-filter': 'blur(8px)', '-webkit-backdrop-filter': 'blur(8px)' },
+        '.glass-blur': { 'backdrop-filter': 'blur(12px)', '-webkit-backdrop-filter': 'blur(12px)' },
+        '.glass-blur-lg': { 'backdrop-filter': 'blur(20px)', '-webkit-backdrop-filter': 'blur(20px)' },
+        '.glass-blur-xl': { 'backdrop-filter': 'blur(24px)', '-webkit-backdrop-filter': 'blur(24px)' },
+        '.glow-cta-sm': { 'box-shadow': '0 0 8px rgba(225,29,72,0.2)' },
+        '.glow-cta': { 'box-shadow': '0 0 12px rgba(225,29,72,0.25)' },
+        '.glow-cta-lg': { 'box-shadow': '0 0 24px rgba(225,29,72,0.3)' },
+      });
+    },
+  ],
 };
