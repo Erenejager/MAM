@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Search, LayoutGrid, ArrowDownNarrowWide, X, Upload, Settings, Video, Library } from 'lucide-react';
+import { Search, X, Upload, Settings, Video, Library } from 'lucide-react';
 import { FilterBar } from './FilterBar';
 import { MediaSphereLogo } from './MediaSphereLogo';
 import { useAssets } from '../../hooks/useAssets';
@@ -115,11 +115,16 @@ export function TopBar({
         </div>
       )}
       <header className="h-[52px] bg-[rgba(15,15,30,0.5)] glass-blur-xl border-b border-glass-border flex items-center px-xl gap-sm">
-        {/* Logo */}
-        <MediaSphereLogo />
+        {/* Logo — click to go home */}
+        <button onClick={() => onNavigate('library')} className="cursor-pointer shrink-0" aria-label="Go to library">
+          <MediaSphereLogo />
+        </button>
+
+        {/* Spacer to center search */}
+        <div className="flex-1" />
 
         {/* Search bar with inline expand */}
-        <div ref={containerRef} className="max-w-[340px] w-full relative">
+        <div ref={containerRef} className="max-w-[480px] w-full relative">
           {!expanded ? (
             /* Collapsed trigger */
             <button
@@ -210,17 +215,7 @@ export function TopBar({
           )}
         </div>
 
-        {/* Grid + Sort icon buttons */}
-        <div className="flex gap-xs">
-          <button className="w-[32px] h-[32px] rounded bg-glass border border-glass-border flex items-center justify-center text-text-muted hover:bg-glass-hover hover:text-text transition-all duration-200">
-            <LayoutGrid size={15} />
-          </button>
-          <button className="w-[32px] h-[32px] rounded bg-glass border border-glass-border flex items-center justify-center text-text-muted hover:bg-glass-hover hover:text-text transition-all duration-200">
-            <ArrowDownNarrowWide size={15} />
-          </button>
-        </div>
-
-        {/* Spacer */}
+        {/* Spacer to center search */}
         <div className="flex-1" />
 
         {/* Pill tabs */}
@@ -238,19 +233,6 @@ export function TopBar({
           >
             <Upload size={11} />
             Import
-            <span
-              style={{
-                padding: '1px 4px',
-                background: '#E11D48',
-                borderRadius: 99,
-                fontSize: 7,
-                color: 'white',
-                fontWeight: 600,
-                lineHeight: 1.4,
-              }}
-            >
-              2
-            </span>
           </button>
           <button
             onClick={() => onNavigate('settings')}

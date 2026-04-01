@@ -30,7 +30,7 @@ export function MediaSphereLogo() {
 
   return (
     <div
-      className="relative flex items-center select-none cursor-default flex-shrink-0"
+      className="relative flex items-center select-none cursor-pointer flex-shrink-0"
       style={{ gap: '8px' }}
     >
       {/* Sphere icon — 30x30px */}
