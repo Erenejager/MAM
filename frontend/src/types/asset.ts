@@ -14,6 +14,7 @@ export interface Asset {
   metadataStatus: string;
   thumbnailPath: string | null;
   thumbnailStatus: string;
+  framesStatus: string;
   transcriptPath: string | null;
   transcriptText: string | null;
   transcriptionStatus: 'pending' | 'processing' | 'ready' | 'complete' | 'failed';
