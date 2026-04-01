@@ -10,6 +10,7 @@ import { DropOverlay } from './components/upload/DropOverlay';
 import { Toaster } from './components/ui/sonner';
 import { useSearch } from './hooks/useSearch';
 import { useTagFilter } from './hooks/useTagFilter';
+import { useAssets } from './hooks/useAssets';
 import type { SearchResult } from './types/asset';
 
 export default function App() {
@@ -51,12 +52,28 @@ export default function App() {
   const handleNavigate = useCallback(
     (target: 'library' | 'settings' | 'import') => {
       setView(target);
+      if (target === 'import') setCompletedSinceLastVisit(0);
       if (target !== 'library') setSelectedAssetId(null);
     },
     []
   );
 
+  const handleImportComplete = useCallback(() => {
+    if (view !== 'import') {
+      setCompletedSinceLastVisit(c => c + 1);
+    }
+  }, [view]);
+
+  const handleViewAssetFromToast = useCallback((assetId: string) => {
+    setSelectedAssetId(assetId);
+    setView('library');
+  }, []);
+
   const [isUploading, setIsUploading] = useState(false);
+  const [completedSinceLastVisit, setCompletedSinceLastVisit] = useState(0);
+
+  const { data: allAssets } = useAssets();
+  const isIngesting = allAssets?.some(a => a.status === 'ingesting') ?? false;
 
   const handleGlobalDrop = useCallback(
     async (file: File) => {
@@ -89,6 +106,8 @@ export default function App() {
       onSelectAsset={(id) => { setSelectedAssetId(id); setView('library'); }}
       onNavigate={handleNavigate}
       activeView={view}
+      isIngesting={isIngesting}
+      completedSinceLastVisit={completedSinceLastVisit}
     />
   );
 
@@ -128,7 +147,12 @@ export default function App() {
           />
         )}
         {view === 'settings' && <SettingsPage />}
-        {view === 'import' && <ImportView />}
+        {view === 'import' && (
+          <ImportView
+            onViewAsset={handleViewAssetFromToast}
+            onImportComplete={handleImportComplete}
+          />
+        )}
       </AppShell>
       <Toaster position="bottom-right" theme="dark" />
     </>

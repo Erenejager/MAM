@@ -15,6 +15,8 @@ interface TopBarProps {
   onSelectAsset: (id: string) => void;
   onNavigate: (view: 'library' | 'import' | 'settings') => void;
   activeView: 'library' | 'import' | 'settings';
+  isIngesting?: boolean;
+  completedSinceLastVisit?: number;
 }
 
 export function TopBar({
@@ -28,6 +30,8 @@ export function TopBar({
   onSelectAsset,
   onNavigate,
   activeView,
+  isIngesting,
+  completedSinceLastVisit,
 }: TopBarProps) {
   const [expanded, setExpanded] = useState(false);
   const [inputValue, setInputValue] = useState(searchQuery);
@@ -229,10 +233,36 @@ export function TopBar({
           </button>
           <button
             onClick={() => onNavigate('import')}
-            className={`${pillBase} ${activeView === 'import' ? pillActive : pillInactive}`}
+            className={`${pillBase} ${activeView === 'import' ? pillActive : pillInactive} ${
+              isIngesting && activeView !== 'import'
+                ? '!border-cta/20 !bg-cta/8 !text-cta'
+                : ''
+            }`}
           >
             <Upload size={11} />
             Import
+            {isIngesting && (
+              <span
+                className="w-[6px] h-[6px] rounded-full bg-cta ml-[2px]"
+                style={{ animation: 'pulse 1.5s ease-in-out infinite' }}
+                aria-label="Import in progress"
+              />
+            )}
+            {!isIngesting && (completedSinceLastVisit ?? 0) > 0 && (
+              <span
+                style={{
+                  padding: '1px 5px',
+                  background: '#E11D48',
+                  borderRadius: 99,
+                  fontSize: 8,
+                  color: 'white',
+                  fontWeight: 600,
+                  lineHeight: 1.4,
+                }}
+              >
+                {completedSinceLastVisit}
+              </span>
+            )}
           </button>
           <button
             onClick={() => onNavigate('settings')}
