@@ -151,8 +151,8 @@ export function AssetCard({
         </div>
       )}
 
-      {/* Bottom: title only (compact) */}
-      <div className="absolute bottom-0 left-0 right-0 px-sm pb-xs">
+      {/* Bottom: title only (compact) — hides on hover since overlay takes over */}
+      <div className="absolute bottom-0 left-0 right-0 px-sm pb-xs group-hover:opacity-0 transition-opacity duration-200">
         <h3 className="text-xs font-semibold text-white truncate leading-tight">
           {displayTitle}
         </h3>
