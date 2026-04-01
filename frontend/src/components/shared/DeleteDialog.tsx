@@ -69,7 +69,7 @@ export function DeleteDialog({ assetId, assetTitle, onClose, onDeleted }: Delete
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center"
+      className="fixed inset-0 bg-black/50 glass-blur-sm z-50 flex items-center justify-center"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -77,7 +77,7 @@ export function DeleteDialog({ assetId, assetTitle, onClose, onDeleted }: Delete
     >
       <div
         ref={dialogRef}
-        className="bg-panel border border-border rounded-lg shadow-lg p-6 max-w-md w-full"
+        className="bg-[rgba(20,20,35,0.95)] glass-blur-xl border border-glass-border rounded-xl shadow-lg p-6 max-w-md w-full"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="font-semibold text-text text-lg">Delete Asset</h2>
@@ -87,14 +87,14 @@ export function DeleteDialog({ assetId, assetTitle, onClose, onDeleted }: Delete
 
         <div className="flex flex-col gap-3 mt-6">
           <button
-            className="bg-background border border-border text-text px-4 py-2.5 rounded text-sm cursor-pointer hover:border-border-hover transition-colors duration-200 disabled:opacity-50"
+            className="bg-glass border border-glass-border text-text px-4 py-2.5 rounded text-sm cursor-pointer hover:bg-glass-hover transition-colors duration-200 disabled:opacity-50"
             onClick={() => handleDelete(false)}
             disabled={isDeleting}
           >
             {isDeleting ? 'Deleting...' : 'Remove from library'}
           </button>
           <button
-            className="bg-cta text-text px-4 py-2.5 rounded text-sm cursor-pointer hover:bg-cta-hover transition-colors duration-200 disabled:opacity-50"
+            className="bg-cta glass-blur-sm text-text px-4 py-2.5 rounded text-sm cursor-pointer hover:bg-cta-hover transition-colors duration-200 disabled:opacity-50"
             onClick={() => handleDelete(true)}
             disabled={isDeleting}
           >
@@ -103,7 +103,7 @@ export function DeleteDialog({ assetId, assetTitle, onClose, onDeleted }: Delete
         </div>
 
         <button
-          className="text-text-muted text-xs cursor-pointer hover:text-text mt-3 w-full text-center transition-colors duration-150"
+          className="bg-glass border border-glass-border hover:bg-glass-hover text-text-muted text-xs cursor-pointer hover:text-text mt-3 w-full text-center py-2 rounded transition-colors duration-150"
           onClick={onClose}
         >
           Cancel
