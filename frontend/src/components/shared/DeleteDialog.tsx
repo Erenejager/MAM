@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { useDeleteAsset } from '../../hooks/useAssets';
 
 interface DeleteDialogProps {
@@ -77,34 +78,70 @@ export function DeleteDialog({ assetId, assetTitle, onClose, onDeleted }: Delete
     >
       <div
         ref={dialogRef}
-        className="bg-[rgba(20,20,35,0.95)] glass-blur-xl border border-glass-border rounded-xl shadow-lg p-6 max-w-md w-full"
+        className="w-full max-w-[360px] rounded-[14px] overflow-hidden"
+        style={{
+          background: 'rgba(15,15,30,0.97)',
+          backdropFilter: 'blur(20px)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+          padding: 24,
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="font-semibold text-text text-lg">Delete Asset</h2>
-        <p className="text-text-muted text-sm mt-2">
-          What would you like to do with &ldquo;{assetTitle}&rdquo;?
-        </p>
+        {/* Header with icon */}
+        <div className="flex items-center gap-[10px] mb-[16px]">
+          <div
+            className="w-[36px] h-[36px] rounded-[10px] flex items-center justify-center shrink-0"
+            style={{
+              background: 'rgba(225,29,72,0.1)',
+              border: '1px solid rgba(225,29,72,0.2)',
+            }}
+          >
+            <AlertTriangle size={16} className="text-cta" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-[13px] font-semibold text-[#e4e4e7]">Delete Asset</h2>
+            <p className="text-[10px] text-[#71717a] truncate mt-[1px]">{assetTitle}</p>
+          </div>
+        </div>
 
-        <div className="flex flex-col gap-3 mt-6">
+        {/* Options */}
+        <div className="flex flex-col gap-[8px] mb-[12px]">
           <button
-            className="bg-glass border border-glass-border text-text px-4 py-2.5 rounded text-sm cursor-pointer hover:bg-glass-hover transition-colors duration-200 disabled:opacity-50"
             onClick={() => handleDelete(false)}
             disabled={isDeleting}
+            className="w-full text-left cursor-pointer disabled:opacity-50 rounded-[8px] px-[12px] py-[10px] transition-colors duration-150 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.07)] hover:bg-glass-hover"
           >
-            {isDeleting ? 'Deleting...' : 'Remove from library'}
+            <div className="text-[11px] font-medium text-[#e4e4e7]">
+              {isDeleting ? 'Removing...' : 'Remove from library'}
+            </div>
+            <div className="text-[9px] text-[#52525b] mt-[2px]">
+              Removes the database entry. Video file stays on disk.
+            </div>
           </button>
+
           <button
-            className="bg-cta glass-blur-sm text-text px-4 py-2.5 rounded text-sm cursor-pointer hover:bg-cta-hover transition-colors duration-200 disabled:opacity-50"
             onClick={() => handleDelete(true)}
             disabled={isDeleting}
+            className="w-full text-left cursor-pointer disabled:opacity-50 rounded-[8px] px-[12px] py-[10px] transition-colors duration-150 hover:bg-cta/10"
+            style={{
+              background: 'rgba(225,29,72,0.06)',
+              border: '1px solid rgba(225,29,72,0.15)',
+            }}
           >
-            {isDeleting ? 'Deleting...' : 'Delete file + library'}
+            <div className="text-[11px] font-medium text-cta">
+              {isDeleting ? 'Deleting...' : 'Delete everything'}
+            </div>
+            <div className="text-[9px] text-[#71717a] mt-[2px]">
+              Permanently removes the video, thumbnail, transcript, and library entry.
+            </div>
           </button>
         </div>
 
+        {/* Cancel */}
         <button
-          className="bg-glass border border-glass-border hover:bg-glass-hover text-text-muted text-xs cursor-pointer hover:text-text mt-3 w-full text-center py-2 rounded transition-colors duration-150"
           onClick={onClose}
+          className="w-full text-center py-[6px] text-[10px] text-[#71717a] hover:text-[#a1a1aa] cursor-pointer bg-transparent border border-[rgba(255,255,255,0.05)] rounded-[6px] transition-colors duration-150"
         >
           Cancel
         </button>
