@@ -21,12 +21,7 @@ export function CustomFieldsSection({ assetId }: CustomFieldsSectionProps) {
   };
 
   return (
-    <section className="rounded-lg bg-glass border border-glass-border">
-      <div className="px-md py-sm border-b border-glass-border">
-        <h3 className="text-text-dim text-[10px] uppercase tracking-widest font-sans">
-          Custom Fields
-        </h3>
-      </div>
+    <div>
       {fields.map((field, i) => (
         <div
           key={field.id}
@@ -41,6 +36,6 @@ export function CustomFieldsSection({ assetId }: CustomFieldsSectionProps) {
           />
         </div>
       ))}
-    </section>
+    </div>
   );
 }

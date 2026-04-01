@@ -4,7 +4,6 @@ import { useAsset } from '../../hooks/useAssets';
 import { VideoPlayer } from './VideoPlayer';
 import { MetadataSection } from './MetadataSection';
 import { TranscriptList } from './TranscriptList';
-import { CustomFieldsSection } from './CustomFieldsSection';
 import type { TranscriptSegment } from '../../types/asset';
 
 interface DetailPanelProps {
@@ -137,10 +136,7 @@ export function DetailPanel({
           {/* Tab content */}
           {activeTab === 'info' && (
             <div className="flex-1 overflow-y-auto p-sm">
-              <div className="flex flex-col gap-sm">
-                <MetadataSection asset={asset} />
-                <CustomFieldsSection assetId={asset.id} />
-              </div>
+              <MetadataSection asset={asset} />
             </div>
           )}
           {activeTab === 'transcript' && (
