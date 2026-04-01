@@ -107,6 +107,67 @@ export async function assetRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   /**
+   * GET /api/assets/:id/frame?t=:seconds — extract and serve a single frame
+   * Caches to {STORAGE_ROOT}/{id}/frame_t{seconds}.jpg
+   */
+  fastify.get<{
+    Params: { id: string };
+    Querystring: { t?: string };
+  }>('/api/assets/:id/frame', async (request, reply) => {
+    const { id } = request.params;
+    const tParam = request.query.t;
+
+    if (tParam == null || tParam === '') {
+      return reply.status(400).send({ error: 'Missing t query parameter' });
+    }
+
+    const seconds = parseFloat(tParam);
+    if (!isFinite(seconds) || seconds < 0) {
+      return reply.status(400).send({ error: 'Invalid t parameter' });
+    }
+
+    const asset = db.select().from(assets).where(eq(assets.id, id)).get();
+    if (!asset) {
+      return reply.status(404).send({ error: 'Asset not found' });
+    }
+
+    const storageRoot = process.env.STORAGE_ROOT!;
+    const roundedT = Math.round(seconds);
+    const cachedFilename = `frame_t${roundedT}.jpg`;
+    const cachedPath = resolve(storageRoot, id, cachedFilename);
+
+    // Check cache
+    const { existsSync } = await import('node:fs');
+    if (existsSync(cachedPath)) {
+      return reply.sendFile(cachedFilename, resolve(storageRoot, id));
+    }
+
+    // Extract frame via ffmpeg
+    const filePath = resolve(storageRoot, asset.filepath);
+    const ffmpeg = (await import('fluent-ffmpeg')).default;
+
+    try {
+      await new Promise<void>((res, rej) => {
+        ffmpeg(filePath)
+          .screenshots({
+            count: 1,
+            timemarks: [String(seconds)],
+            filename: cachedFilename,
+            folder: resolve(storageRoot, id),
+            size: '?x360',
+          })
+          .on('end', () => res())
+          .on('error', (err: Error) => rej(err));
+      });
+
+      return reply.sendFile(cachedFilename, resolve(storageRoot, id));
+    } catch (err) {
+      request.log.error(err, 'Frame extraction failed');
+      return reply.status(404).send({ error: 'Frame extraction failed' });
+    }
+  });
+
+  /**
    * GET /api/assets — list all assets with optional tag filter
    * Query params: tags (string | string[]) — AND filter when multiple values
    */
@@ -220,5 +281,42 @@ export async function assetRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     return db.select().from(assets).where(eq(assets.id, id)).get();
+  });
+
+  /**
+   * POST /api/reindex — backfill all existing assets into OpenSearch
+   */
+  fastify.post('/api/reindex', async (_request, reply) => {
+    const allAssets = db.select().from(assets).all();
+    let indexed = 0;
+    let failed = 0;
+
+    for (const asset of allAssets) {
+      try {
+        await opensearchClient.index({
+          index: 'mam-assets',
+          id: asset.id,
+          body: {
+            id: asset.id,
+            title: asset.title ?? '',
+            description: asset.description ?? '',
+            tags: JSON.parse(asset.tags ?? '[]') as string[],
+            transcript: asset.transcriptText ?? '',
+            duration_seconds: asset.durationSeconds,
+            codec: asset.codec,
+            resolution: asset.width && asset.height ? `${asset.width}x${asset.height}` : null,
+            created_at: asset.createdAt && !asset.createdAt.includes('(') ? asset.createdAt : new Date().toISOString(),
+          },
+        });
+        db.update(assets).set({ searchIndexStatus: 'done' }).where(eq(assets.id, asset.id)).run();
+        indexed++;
+      } catch (err) {
+        console.error('Reindex failed for', asset.id, (err as any)?.meta?.body ?? (err as Error).message);
+        db.update(assets).set({ searchIndexStatus: 'failed' }).where(eq(assets.id, asset.id)).run();
+        failed++;
+      }
+    }
+
+    return { total: allAssets.length, indexed, failed };
   });
 }
