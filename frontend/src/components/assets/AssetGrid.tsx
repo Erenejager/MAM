@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { AssetCard } from './AssetCard';
 import { AssetContextMenu } from './AssetContextMenu';
 import { DeleteDialog } from '../shared/DeleteDialog';
-import { FilterBar } from '../layout/FilterBar';
 import { useAssets } from '../../hooks/useAssets';
 import type { SearchResult } from '../../types/asset';
 
@@ -25,8 +24,8 @@ export function AssetGrid({
   isSearchActive,
   onTimecodeClick,
   selectedTags,
-  onToggleTag,
-  onClearTags,
+  onToggleTag: _onToggleTag,
+  onClearTags: _onClearTags,
 }: AssetGridProps) {
   const { data: assets = [], isLoading } = useAssets(selectedTags.length > 0 ? selectedTags : undefined);
 
@@ -81,9 +80,9 @@ export function AssetGrid({
 
   if (isLoading) {
     return (
-      <div className="p-lg">
-        <div className="grid grid-cols-3 gap-md">
-          {Array.from({ length: 6 }).map((_, i) => (
+      <div className="p-md">
+        <div className="grid grid-cols-4 gap-sm">
+          {Array.from({ length: 8 }).map((_, i) => (
             <div
               key={i}
               className="aspect-video rounded-lg bg-panel animate-pulse"
@@ -112,23 +111,18 @@ export function AssetGrid({
 
   return (
     <div className="h-full flex flex-col">
-      <FilterBar
-        selectedTags={selectedTags}
-        onToggleTag={onToggleTag}
-        onClearTags={onClearTags}
-      />
-      <div className="p-lg overflow-y-auto flex-1">
+      <div className="p-md overflow-y-auto flex-1">
         {/* Asset grid */}
-        <div className="grid grid-cols-3 gap-md">
+        <div className="grid grid-cols-4 gap-sm">
           <AnimatePresence mode="popLayout">
-            {displayAssets.map((asset) => (
+            {displayAssets.map((asset, index) => (
               <motion.div
                 key={asset.id}
                 layout
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.15 }}
+                style={{ animationDelay: `${index * 50}ms` }}
+                className="animate-[listIn_0.5s_cubic-bezier(0.16,1,0.3,1)_backwards]"
               >
                 <AssetCard
                   asset={asset}

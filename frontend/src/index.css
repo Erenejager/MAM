@@ -91,6 +91,12 @@ mark {
   100% { transform: scaleX(0); opacity: 0; }
 }
 
+/* Card staggered entry */
+@keyframes listIn {
+  from { transform: translateY(16px) scale(0.97); opacity: 0; filter: blur(4px); }
+  to { transform: translateY(0) scale(1); opacity: 1; filter: blur(0); }
+}
+
 /* Selection shimmer */
 @keyframes border-shimmer {
   0% { background-position: 0% 50%; }

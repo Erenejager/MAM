@@ -34,12 +34,12 @@ export function StatusBadge({ status, transcriptionStatus }: StatusBadgeProps) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full bg-background/50',
+        'inline-flex items-center gap-[3px] text-[10px] px-xs py-0 rounded-full bg-background/50 glass-blur-sm border border-[rgba(255,255,255,0.08)] leading-relaxed',
         colorClass
       )}
     >
       {showPulse && (
-        <span className={cn('w-1.5 h-1.5 rounded-full animate-pulse', `bg-current`)} />
+        <span className={cn('w-[5px] h-[5px] rounded-full animate-pulse', `bg-current`)} />
       )}
       {label}
     </span>
