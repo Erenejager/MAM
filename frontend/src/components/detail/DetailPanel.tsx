@@ -5,6 +5,7 @@ import { VideoPlayer } from './VideoPlayer';
 import { MetadataSection } from './MetadataSection';
 import { TranscriptList } from './TranscriptList';
 import type { TranscriptSegment } from '../../types/asset';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../ui/resizable';
 
 interface DetailPanelProps {
   assetId: string;
@@ -97,15 +98,57 @@ export function DetailPanel({
         </h2>
       </div>
 
-      {/* Main content: video left, details right */}
-      <div className="flex-1 flex min-h-0 overflow-hidden">
+      {/* Main content: resizable video left, details right */}
+      <ResizablePanelGroup
+        orientation="horizontal"
+        className="flex-1 min-h-0"
+        defaultLayout={(() => {
+          try {
+            const saved = localStorage.getItem('mam-detail-split');
+            return saved ? JSON.parse(saved) : undefined;
+          } catch {
+            return undefined;
+          }
+        })()}
+        onLayoutChanged={(layout) => {
+          try {
+            localStorage.setItem('mam-detail-split', JSON.stringify(layout));
+          } catch {}
+        }}
+      >
         {/* Left: Video player */}
-        <div className="w-[60%] shrink-0 flex items-center justify-center bg-black overflow-hidden">
+        <ResizablePanel
+          id="video"
+          defaultSize={60}
+          minSize={40}
+          maxSize={75}
+          className="flex items-center justify-center bg-black overflow-hidden"
+        >
           <VideoPlayer asset={asset} ref={videoRef} />
-        </div>
+        </ResizablePanel>
+
+        {/* Custom glass resize handle */}
+        <ResizableHandle
+          className="w-[6px] bg-[rgba(255,255,255,0.03)] border-x border-[rgba(255,255,255,0.07)] hover:bg-[rgba(255,255,255,0.06)] active:bg-[rgba(225,29,72,0.08)] transition-colors cursor-col-resize group relative flex items-center justify-center"
+        >
+          <div className="flex flex-col gap-[3px]">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="w-[3px] h-[3px] rounded-full bg-[rgba(255,255,255,0.15)] group-hover:bg-[rgba(255,255,255,0.3)] group-active:bg-[rgba(225,29,72,0.4)] transition-colors"
+              />
+            ))}
+          </div>
+        </ResizableHandle>
 
         {/* Right: Tabbed metadata/transcript */}
-        <div className="w-[40%] flex flex-col min-h-0 overflow-hidden border-l border-glass-border">
+        <ResizablePanel
+          id="details"
+          defaultSize={40}
+          minSize={25}
+          maxSize={60}
+          className="flex flex-col min-h-0 overflow-hidden border-l border-glass-border"
+        >
           {/* Tab bar */}
           <div className="shrink-0 flex border-b border-glass-border relative">
             {tabs.map((tab) => (
@@ -149,8 +192,8 @@ export function DetailPanel({
               />
             </div>
           )}
-        </div>
-      </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }
