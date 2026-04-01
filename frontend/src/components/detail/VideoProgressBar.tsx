@@ -111,6 +111,28 @@ export function VideoProgressBar({ videoRef }: VideoProgressBarProps) {
     };
   }, [dragging, duration, videoRef]);
 
+  // Keyboard seek for accessibility
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const video = videoRef.current;
+      if (!video) return;
+      const step = 5; // seconds
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        video.currentTime = Math.min(video.currentTime + step, duration);
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        video.currentTime = Math.max(video.currentTime - step, 0);
+      }
+    },
+    [videoRef, duration]
+  );
+
+  // Respect prefers-reduced-motion
+  const prefersReducedMotion =
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   const expanded = hovered || dragging;
   const barHeight = expanded ? 6 : 3;
 
@@ -144,9 +166,11 @@ export function VideoProgressBar({ videoRef }: VideoProgressBarProps) {
       <div
         ref={barRef}
         className="absolute bottom-0 left-0 right-0 cursor-pointer"
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
         style={{
           height: barHeight,
-          transition: 'height 150ms ease-out',
+          transition: prefersReducedMotion ? 'none' : 'height 150ms ease-out',
           background: 'rgba(255,255,255,0.08)',
         }}
         onClick={handleSeek}
@@ -174,7 +198,7 @@ export function VideoProgressBar({ videoRef }: VideoProgressBarProps) {
         {/* Scrubber dot */}
         {expanded && (
           <div
-            className="absolute top-1/2 -translate-y-1/2 rounded-full pointer-events-none"
+            className="absolute top-1/2 rounded-full pointer-events-none"
             style={{
               left: `${progress * 100}%`,
               transform: `translate(-50%, -50%)`,
