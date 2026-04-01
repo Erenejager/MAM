@@ -1,4 +1,3 @@
-import { Fragment } from 'react';
 import { InlineEditText } from './InlineEditText';
 import { useCustomFields, useCustomValues, usePatchCustomValue } from '../../hooks/useAssets';
 
@@ -22,23 +21,26 @@ export function CustomFieldsSection({ assetId }: CustomFieldsSectionProps) {
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <span className="text-text-muted font-semibold text-xs uppercase tracking-wider">
-        Custom Fields
-      </span>
-      <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-        {fields.map(field => (
-          <Fragment key={field.id}>
-            <span className="text-text-muted font-semibold text-sm">{field.name}</span>
-            <InlineEditText
-              value={getValueForField(field.id)}
-              onSave={(v) => handleSaveValue(field.id, v)}
-              placeholder="\u2014"
-              ariaLabel={`Edit ${field.name}`}
-            />
-          </Fragment>
-        ))}
+    <section className="rounded-lg bg-glass border border-glass-border">
+      <div className="px-md py-sm border-b border-glass-border">
+        <h3 className="text-text-dim text-[10px] uppercase tracking-widest font-sans">
+          Custom Fields
+        </h3>
       </div>
-    </div>
+      {fields.map((field, i) => (
+        <div
+          key={field.id}
+          className={`px-md py-sm hover:border-border-hover hover:bg-glass-hover focus-within:border-cta/40 focus-within:shadow-[0_0_0_3px_rgba(225,29,72,0.1)] transition-all duration-150 ${i < fields.length - 1 ? 'border-b border-glass-border' : ''}`}
+        >
+          <span className="text-text-dim text-[10px] block leading-none mb-[3px]">{field.name}</span>
+          <InlineEditText
+            value={getValueForField(field.id)}
+            onSave={(v) => handleSaveValue(field.id, v)}
+            placeholder="\u2014"
+            ariaLabel={`Edit ${field.name}`}
+          />
+        </div>
+      ))}
+    </section>
   );
 }

@@ -81,43 +81,42 @@ export function DetailPanel({
   const tabs = ['info', 'transcript'] as const;
 
   return (
-    <div className="h-full flex flex-col bg-background">
+    <div className="h-full flex flex-col bg-[rgba(12,12,20,0.92)] glass-blur-xl">
       {/* Back button header */}
-      <div className="shrink-0 flex items-center gap-2 px-6 py-3 border-b border-border">
+      <div className="shrink-0 flex items-center gap-sm px-md py-xs border-b border-glass-border bg-[rgba(12,12,20,0.92)] glass-blur-xl">
         <button
           onClick={onClose}
-          className="flex items-center gap-1.5 text-text-muted hover:text-text transition-colors"
+          className="flex items-center gap-xs text-text-muted hover:text-text bg-glass border border-glass-border px-xs py-xs -ml-xs rounded-lg hover:bg-glass-hover transition-all duration-150"
           aria-label="Back to library"
         >
-          <ArrowLeft size={18} />
-          <span className="text-sm">Back</span>
+          <ArrowLeft size={14} />
+          <span className="text-xs font-medium">Back</span>
         </button>
-        <h2 className="text-sm font-semibold text-text truncate ml-4">
+        <div className="w-px h-md bg-border" />
+        <h2 className="text-xs font-semibold text-text truncate">
           {asset.title || asset.originalFilename}
         </h2>
       </div>
 
       {/* Main content: video left, details right */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* Left: Video player */}
-        <div className="w-[60%] shrink-0 flex flex-col bg-black">
-          <div className="flex-1 flex items-center justify-center">
-            <VideoPlayer asset={asset} ref={videoRef} />
-          </div>
+        <div className="w-[60%] shrink-0 flex items-center justify-center bg-black overflow-hidden">
+          <VideoPlayer asset={asset} ref={videoRef} />
         </div>
 
         {/* Right: Tabbed metadata/transcript */}
-        <div className="w-[40%] flex flex-col border-l border-border">
+        <div className="w-[40%] flex flex-col min-h-0 overflow-hidden border-l border-glass-border">
           {/* Tab bar */}
-          <div className="shrink-0 flex border-b border-border">
+          <div className="shrink-0 flex border-b border-glass-border relative">
             {tabs.map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`flex-1 py-2 text-sm font-medium capitalize transition-colors ${
+                className={`flex-1 py-xs text-xs font-medium capitalize transition-colors duration-200 relative z-10 ${
                   activeTab === tab
-                    ? 'text-cta border-b-2 border-cta'
-                    : 'text-text-muted hover:text-text'
+                    ? 'text-cta'
+                    : 'text-text-dim hover:text-text hover:bg-glass-hover'
                 }`}
                 role="tab"
                 aria-selected={activeTab === tab}
@@ -125,25 +124,35 @@ export function DetailPanel({
                 {tab}
               </button>
             ))}
+            {/* Animated underline indicator */}
+            <div
+              className="absolute bottom-0 h-0.5 bg-cta transition-all duration-300 ease-out"
+              style={{
+                width: `${100 / tabs.length}%`,
+                left: `${(tabs.indexOf(activeTab) * 100) / tabs.length}%`,
+              }}
+            />
           </div>
 
           {/* Tab content */}
-          <div className="flex-1 overflow-y-auto p-4">
-            {activeTab === 'info' && (
-              <>
+          {activeTab === 'info' && (
+            <div className="flex-1 overflow-y-auto p-sm">
+              <div className="flex flex-col gap-sm">
                 <MetadataSection asset={asset} />
                 <CustomFieldsSection assetId={asset.id} />
-              </>
-            )}
-            {activeTab === 'transcript' && (
+              </div>
+            </div>
+          )}
+          {activeTab === 'transcript' && (
+            <div className="flex-1 flex flex-col min-h-0">
               <TranscriptList
                 asset={asset}
                 videoRef={videoRef}
                 segments={segments}
                 loading={segmentsLoading}
               />
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

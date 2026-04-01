@@ -12,13 +12,15 @@ export const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
       : undefined;
 
     return (
-      <video
-        ref={ref}
-        src={`/storage/${asset.filepath}`}
-        poster={posterUrl}
-        controls
-        className="max-w-full max-h-full"
-      />
+      <div className="w-full h-full border border-glass-border rounded-sm overflow-hidden">
+        <video
+          ref={ref}
+          src={`/storage/${asset.filepath}`}
+          poster={posterUrl}
+          controls
+          className="w-full h-full object-contain"
+        />
+      </div>
     );
   }
 );

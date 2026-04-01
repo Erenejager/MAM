@@ -113,7 +113,7 @@ export function TagEditor({ tags, onTagsChange }: TagEditorProps) {
       {localTags.map((tag) => (
         <span
           key={tag}
-          className="inline-flex items-center gap-1 bg-panel/80 border border-border text-text-muted px-2 py-0.5 rounded text-xs font-mono cursor-default"
+          className="inline-flex items-center gap-[3px] bg-glass glass-blur-sm border border-glass-border text-text-muted px-[6px] py-[1px] rounded-lg text-[11px] font-sans cursor-default hover:border-cta/30 transition-colors duration-150"
         >
           {tag}
           <button
@@ -129,14 +129,14 @@ export function TagEditor({ tags, onTagsChange }: TagEditorProps) {
         <button
           onClick={() => setIsOpen(true)}
           aria-label="Add tag"
-          className="w-6 h-6 rounded border border-border text-text-muted hover:border-cta hover:text-cta cursor-pointer transition-colors duration-150 flex items-center justify-center"
+          className="w-6 h-6 rounded-lg border border-dashed border-glass-border text-text-muted hover:border-cta hover:text-cta cursor-pointer transition-colors duration-150 flex items-center justify-center"
         >
           <Plus className="w-3.5 h-3.5" />
         </button>
         {isOpen && (
           <div
             role="listbox"
-            className="absolute z-50 mt-1 w-56 bg-panel border border-border rounded-lg shadow-lg overflow-hidden"
+            className="absolute z-50 mt-1 w-56 bg-[rgba(20,20,35,0.9)] glass-blur-xl border border-glass-border rounded-lg shadow-lg overflow-hidden"
           >
             <input
               ref={inputRef}
@@ -150,7 +150,7 @@ export function TagEditor({ tags, onTagsChange }: TagEditorProps) {
                 setActiveIndex(-1);
               }}
               onKeyDown={handleDropdownKeyDown}
-              className="w-full bg-background border-b border-border px-3 py-2 text-sm text-text placeholder:text-text-muted outline-none"
+              className="w-full bg-glass border-b border-glass-border px-3 py-2 text-sm text-text placeholder:text-text-muted outline-none"
             />
             <div className="max-h-[228px] overflow-y-auto">
               {filteredTags.length === 0 && !showCreate && (
@@ -165,7 +165,7 @@ export function TagEditor({ tags, onTagsChange }: TagEditorProps) {
                   onClick={() => handleSelectTag(tag)}
                   className={cn(
                     'w-full text-left px-3 py-1.5 text-sm text-text cursor-pointer transition-colors duration-150',
-                    activeIndex === i ? 'bg-background' : 'hover:bg-background',
+                    activeIndex === i ? 'bg-glass-hover' : 'hover:bg-glass-hover',
                   )}
                 >
                   {tag}
@@ -179,7 +179,7 @@ export function TagEditor({ tags, onTagsChange }: TagEditorProps) {
                   onClick={() => handleSelectTag(debouncedInput)}
                   className={cn(
                     'w-full text-left px-3 py-1.5 text-sm text-cta cursor-pointer transition-colors duration-150',
-                    activeIndex === filteredTags.length ? 'bg-background' : 'hover:bg-background',
+                    activeIndex === filteredTags.length ? 'bg-glass-hover' : 'hover:bg-glass-hover',
                   )}
                 >
                   Create &quot;{debouncedInput}&quot;

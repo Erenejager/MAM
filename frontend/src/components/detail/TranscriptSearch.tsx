@@ -29,47 +29,47 @@ export function TranscriptSearch({
   };
 
   return (
-    <div className="sticky top-0 z-10 bg-panel pb-2 px-4 pt-2">
-      <div className="flex items-center gap-2 bg-background border border-border rounded-lg px-4 py-2 focus-within:border-cta focus-within:shadow-[0_0_0_3px_rgba(225,29,72,0.15)] transition-colors">
-        <Search className="w-4 h-4 text-text-muted shrink-0" />
+    <div className="shrink-0 px-sm py-xs border-b border-glass-border bg-glass">
+      <div className="flex items-center gap-[6px] bg-glass border border-glass-border rounded-lg px-sm py-[5px] focus-within:border-cta/40 focus-within:shadow-[0_0_0_3px_rgba(225,29,72,0.1)] transition-colors">
+        <Search className="w-3.5 h-3.5 text-text-dim shrink-0" />
         <input
           aria-label="Search transcript"
           placeholder="Search transcript..."
           value={query}
           onChange={e => onQueryChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="bg-transparent border-none outline-none text-sm text-text placeholder:text-text-muted flex-1 min-w-0 font-sans"
+          className="bg-transparent border-none outline-none text-xs text-text placeholder:text-text-dim flex-1 min-w-0 font-sans"
         />
         {query.length > 0 && (
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="text-xs text-text-muted font-mono">
-              {totalMatches > 0 ? `${currentMatch + 1} of ${totalMatches}` : 'No matches'}
+          <div className="flex items-center gap-[4px] shrink-0">
+            <span className="text-[10px] text-text-muted font-mono">
+              {totalMatches > 0 ? `${currentMatch + 1}/${totalMatches}` : '0/0'}
             </span>
             <button
               type="button"
               aria-label="Previous match"
               onClick={onPrev}
               disabled={totalMatches === 0}
-              className="text-text-muted hover:text-text cursor-pointer disabled:opacity-40 disabled:cursor-default"
+              className="text-text-muted hover:text-text cursor-pointer disabled:opacity-30 disabled:cursor-default p-[1px] rounded-lg bg-glass border border-glass-border hover:bg-glass-hover transition-colors"
             >
-              <ChevronUp className="w-4 h-4" />
+              <ChevronUp className="w-3.5 h-3.5" />
             </button>
             <button
               type="button"
               aria-label="Next match"
               onClick={onNext}
               disabled={totalMatches === 0}
-              className="text-text-muted hover:text-text cursor-pointer disabled:opacity-40 disabled:cursor-default"
+              className="text-text-muted hover:text-text cursor-pointer disabled:opacity-30 disabled:cursor-default p-[1px] rounded-lg bg-glass border border-glass-border hover:bg-glass-hover transition-colors"
             >
-              <ChevronDown className="w-4 h-4" />
+              <ChevronDown className="w-3.5 h-3.5" />
             </button>
             <button
               type="button"
               aria-label="Clear search"
               onClick={() => onQueryChange('')}
-              className="text-text-muted hover:text-text cursor-pointer"
+              className="text-text-muted hover:text-text cursor-pointer p-[1px] rounded-lg bg-glass border border-glass-border hover:bg-glass-hover transition-colors"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-3 h-3" />
             </button>
           </div>
         )}

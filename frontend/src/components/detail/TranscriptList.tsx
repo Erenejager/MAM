@@ -1,11 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Asset, TranscriptSegment } from '../../types/asset';
 import { formatTimecode } from '../../lib/formatters';
 import { cn } from '../../lib/cn';
 import { useTranscriptSearch } from '../../hooks/useTranscriptSearch';
 import { TranscriptSearch } from './TranscriptSearch';
 import { escapeRegex } from '../../lib/escapeRegex';
-import { useState } from 'react';
 
 interface TranscriptListProps {
   asset: Asset;
@@ -88,7 +87,6 @@ export function TranscriptList({ asset, videoRef, segments, loading }: Transcrip
     const el = segmentRefs.current.get(match.segmentIndex);
     el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 
-    // Suppress playback auto-scroll for 3 seconds after search navigation
     userNavigatingRef.current = true;
     clearTimeout(scrollTimeoutRef.current);
     scrollTimeoutRef.current = setTimeout(() => {
@@ -102,7 +100,8 @@ export function TranscriptList({ asset, videoRef, segments, loading }: Transcrip
   }, []);
 
   // Click to seek
-  const handleSeek = (start: number) => {
+  const handleSeek = (start: number, index: number) => {
+    setActiveIndex(index);
     if (videoRef.current) {
       videoRef.current.currentTime = start;
     }
@@ -111,8 +110,8 @@ export function TranscriptList({ asset, videoRef, segments, loading }: Transcrip
   // Status display when not ready
   if (asset.transcriptionStatus === 'pending') {
     return (
-      <div className="flex items-center gap-2 text-sm text-text-muted px-3 py-4">
-        <span className="w-2 h-2 rounded-full bg-status-pending animate-pulse" />
+      <div className="flex items-center gap-[6px] text-xs text-text-muted px-md py-md">
+        <span className="w-1.5 h-1.5 rounded-full bg-status-pending animate-pulse" />
         Transcription pending...
       </div>
     );
@@ -120,8 +119,8 @@ export function TranscriptList({ asset, videoRef, segments, loading }: Transcrip
 
   if (asset.transcriptionStatus === 'processing') {
     return (
-      <div className="flex items-center gap-2 text-sm text-text-muted px-3 py-4">
-        <span className="w-2 h-2 rounded-full bg-status-processing animate-pulse" />
+      <div className="flex items-center gap-[6px] text-xs text-text-muted px-md py-md">
+        <span className="w-1.5 h-1.5 rounded-full bg-status-processing animate-pulse" />
         Transcribing...
       </div>
     );
@@ -129,10 +128,10 @@ export function TranscriptList({ asset, videoRef, segments, loading }: Transcrip
 
   if (asset.transcriptionStatus === 'failed') {
     return (
-      <div className="px-3 py-4">
-        <p className="text-sm text-status-failed">Transcription failed</p>
+      <div className="px-md py-md">
+        <p className="text-xs text-status-failed">Transcription failed</p>
         {asset.transcriptionError && (
-          <p className="text-xs text-text-muted mt-1">{asset.transcriptionError}</p>
+          <p className="text-[11px] text-text-muted mt-[2px]">{asset.transcriptionError}</p>
         )}
       </div>
     );
@@ -140,17 +139,17 @@ export function TranscriptList({ asset, videoRef, segments, loading }: Transcrip
 
   if (loading) {
     return (
-      <div className="px-3 py-4 space-y-2">
-        <div className="h-4 bg-background rounded animate-pulse w-3/4" />
-        <div className="h-4 bg-background rounded animate-pulse w-1/2" />
-        <div className="h-4 bg-background rounded animate-pulse w-2/3" />
+      <div className="px-md py-md space-y-sm">
+        <div className="h-3 bg-panel rounded animate-pulse w-3/4" />
+        <div className="h-3 bg-panel rounded animate-pulse w-1/2" />
+        <div className="h-3 bg-panel rounded animate-pulse w-2/3" />
       </div>
     );
   }
 
   if (segments.length === 0) {
     return (
-      <div className="px-3 py-4 text-sm text-text-muted">
+      <div className="px-md py-md text-xs text-text-muted">
         No transcript available
       </div>
     );
@@ -174,18 +173,28 @@ export function TranscriptList({ asset, videoRef, segments, loading }: Transcrip
           <button
             key={i}
             ref={el => { if (el) segmentRefs.current.set(i, el); else segmentRefs.current.delete(i); }}
-            onClick={() => handleSeek(seg.start)}
+            onClick={() => handleSeek(seg.start, i)}
             className={cn(
-              'w-full text-left px-4 py-2 text-sm cursor-pointer transition-colors',
+              'w-full text-left px-md py-xs cursor-pointer transition-colors duration-150 border-b border-glass-border',
               i === activeIndex
-                ? 'bg-cta/20 text-text border-l-2 border-cta'
-                : 'text-text-muted hover:bg-background/50'
+                ? 'bg-glass-hover border-l-2 border-l-cta'
+                : 'hover:bg-glass-hover'
             )}
           >
-            <span className="font-mono text-xs text-text-muted mr-2">
-              {formatTimecode(seg.start)}
-            </span>
-            {highlightText(seg.text, query, i, matches, currentMatchIdx)}
+            <div className="flex items-baseline gap-sm">
+              <span className={cn(
+                'font-mono text-[10px] shrink-0 tabular-nums leading-none',
+                i === activeIndex ? 'text-cta' : 'text-text-dim'
+              )}>
+                {formatTimecode(seg.start)}
+              </span>
+              <span className={cn(
+                'text-xs leading-relaxed',
+                i === activeIndex ? 'text-text' : 'text-text-muted'
+              )}>
+                {highlightText(seg.text, query, i, matches, currentMatchIdx)}
+              </span>
+            </div>
           </button>
         ))}
       </div>
