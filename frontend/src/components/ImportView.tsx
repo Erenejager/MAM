@@ -67,7 +67,7 @@ function formatElapsed(seconds: number): string {
 
 function ProgressBar({ progress }: { progress: number }) {
   return (
-    <div className="w-full h-2 bg-panel rounded-full overflow-hidden border border-border">
+    <div className="w-full h-2 bg-glass glass-blur rounded-full overflow-hidden border border-glass-border">
       <div
         className="h-full bg-cta rounded-full transition-all duration-700 ease-out"
         style={{ width: `${progress}%` }}
@@ -212,7 +212,7 @@ export function ImportView() {
 
   return (
     <div
-      className="min-h-screen bg-background flex items-center justify-center"
+      className="h-full bg-background flex items-center justify-center"
       onDragOver={view.phase === 'idle' ? handleDragOver : undefined}
       onDragLeave={view.phase === 'idle' ? handleDragLeave : undefined}
       onDrop={view.phase === 'idle' ? handleDrop : undefined}
@@ -221,10 +221,10 @@ export function ImportView() {
       {view.phase === 'idle' && (
         <div
           className={[
-            'flex flex-col items-center gap-lg p-3xl rounded-xl border-2 border-dashed transition-colors duration-200 cursor-pointer',
+            'flex flex-col items-center gap-lg p-3xl rounded-xl border-2 border-dashed transition-colors duration-200 cursor-pointer bg-glass glass-blur',
             isDragOver
-              ? 'border-cta bg-cta/5 shadow-accent'
-              : 'border-border bg-panel hover:border-border-hover',
+              ? 'border-cta glow-cta'
+              : 'border-glass-border hover:border-border-hover',
           ].join(' ')}
           style={{ minWidth: 420 }}
           onClick={() => fileInputRef.current?.click()}
@@ -263,7 +263,7 @@ export function ImportView() {
       {/* ── Uploading / Polling: progress view ── */}
       {(view.phase === 'uploading' || view.phase === 'polling') && (
         <div
-          className="flex flex-col gap-lg p-3xl rounded-xl border border-border bg-panel"
+          className="flex flex-col gap-lg p-3xl rounded-xl border border-glass-border bg-glass glass-blur"
           style={{ minWidth: 420 }}
         >
           <div className="flex items-center justify-between">
@@ -281,7 +281,7 @@ export function ImportView() {
       {/* ── Success ── */}
       {view.phase === 'success' && (
         <div
-          className="flex flex-col items-center gap-md p-3xl rounded-xl border border-border bg-panel"
+          className="flex flex-col items-center gap-md p-3xl rounded-xl border border-status-complete/40 bg-glass glass-blur"
           style={{ minWidth: 420 }}
         >
           <div className="w-12 h-12 rounded-full bg-status-complete/20 flex items-center justify-center">
@@ -303,7 +303,7 @@ export function ImportView() {
       {/* ── Error ── */}
       {view.phase === 'error' && (
         <div
-          className="flex flex-col items-center gap-md p-3xl rounded-xl border border-border bg-panel"
+          className="flex flex-col items-center gap-md p-3xl rounded-xl border border-status-failed/40 bg-glass glass-blur"
           style={{ minWidth: 420 }}
         >
           <div className="w-12 h-12 rounded-full bg-status-failed/20 flex items-center justify-center">
