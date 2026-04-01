@@ -123,6 +123,37 @@ mark {
   background: rgba(255, 255, 255, 0.2);
 }
 
+@keyframes ringSpinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes orbBreath {
+  0%, 100% { box-shadow: 0 0 20px rgba(225,29,72,0.35), 0 0 50px rgba(225,29,72,0.1); }
+  50% { box-shadow: 0 0 28px rgba(225,29,72,0.45), 0 0 60px rgba(225,29,72,0.15); }
+}
+@keyframes orbitDot1 {
+  0%   { top: 0;    left: 50%;  transform: translate(-50%, -50%); }
+  25%  { top: 50%;  left: 100%; transform: translate(-50%, -50%); }
+  50%  { top: 100%; left: 50%;  transform: translate(-50%, -50%); }
+  75%  { top: 50%;  left: 0;    transform: translate(-50%, -50%); }
+  100% { top: 0;    left: 50%;  transform: translate(-50%, -50%); }
+}
+@keyframes orbitDot2 {
+  0%   { top: 50%;  left: 0;    transform: translate(-50%, -50%); }
+  25%  { top: 0;    left: 50%;  transform: translate(-50%, -50%); }
+  50%  { top: 50%;  left: 100%; transform: translate(-50%, -50%); }
+  75%  { top: 100%; left: 50%;  transform: translate(-50%, -50%); }
+  100% { top: 50%;  left: 0;    transform: translate(-50%, -50%); }
+}
+@keyframes streakSweep {
+  0%   { opacity: 0; transform: translateY(-50%) scaleX(0.3); }
+  15%  { opacity: 0; }
+  40%  { opacity: 0.8; transform: translateY(-50%) scaleX(1.1); }
+  60%  { opacity: 0.8; transform: translateY(-50%) scaleX(1.1); }
+  85%  { opacity: 0; }
+  100% { opacity: 0; transform: translateY(-50%) scaleX(0.3); }
+}
+
 @layer base {
   .theme {
     --font-heading: var(--font-mono);

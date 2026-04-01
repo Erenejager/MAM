@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { Search, LayoutGrid, ArrowDownNarrowWide, X, Upload, Settings, Video } from 'lucide-react';
+import { Search, LayoutGrid, ArrowDownNarrowWide, X, Upload, Settings, Video, Library } from 'lucide-react';
 import { FilterBar } from './FilterBar';
+import { MediaSphereLogo } from './MediaSphereLogo';
 import { useAssets } from '../../hooks/useAssets';
 
 interface TopBarProps {
@@ -13,7 +14,7 @@ interface TopBarProps {
   onClearTags: () => void;
   onSelectAsset: (id: string) => void;
   onNavigate: (view: 'library' | 'import' | 'settings') => void;
-  viewTitle: string;
+  activeView: 'library' | 'import' | 'settings';
 }
 
 export function TopBar({
@@ -26,7 +27,7 @@ export function TopBar({
   onClearTags,
   onSelectAsset,
   onNavigate,
-  viewTitle,
+  activeView,
 }: TopBarProps) {
   const [expanded, setExpanded] = useState(false);
   const [inputValue, setInputValue] = useState(searchQuery);
@@ -94,13 +95,17 @@ export function TopBar({
   // Filter assets by input for suggestions
   const suggestions = expanded && assets
     ? assets.filter((a) => {
-        if (!inputValue.trim()) return true; // show all when empty
+        if (!inputValue.trim()) return true;
         const q = inputValue.toLowerCase();
         return (a.title || a.originalFilename).toLowerCase().includes(q);
       }).slice(0, 6)
     : [];
 
   const showDropdown = expanded;
+
+  const pillBase = 'flex items-center gap-[4px] px-[12px] py-[4px] rounded-[6px] text-[10px] font-semibold transition-colors duration-150 cursor-pointer';
+  const pillActive = 'bg-cta/10 text-cta';
+  const pillInactive = 'text-text-dim hover:text-text-muted hover:bg-glass-hover';
 
   return (
     <div className="shrink-0">
@@ -110,12 +115,11 @@ export function TopBar({
         </div>
       )}
       <header className="h-[52px] bg-[rgba(15,15,30,0.5)] glass-blur-xl border-b border-glass-border flex items-center px-xl gap-sm">
-        <span className="font-mono text-[13px] font-semibold text-text tracking-[0.5px]">
-          {viewTitle}
-        </span>
+        {/* Logo */}
+        <MediaSphereLogo />
 
         {/* Search bar with inline expand */}
-        <div ref={containerRef} className="flex-1 max-w-[480px] relative">
+        <div ref={containerRef} className="max-w-[340px] w-full relative">
           {!expanded ? (
             /* Collapsed trigger */
             <button
@@ -206,12 +210,54 @@ export function TopBar({
           )}
         </div>
 
-        <div className="ml-auto flex gap-xs">
+        {/* Grid + Sort icon buttons */}
+        <div className="flex gap-xs">
           <button className="w-[32px] h-[32px] rounded bg-glass border border-glass-border flex items-center justify-center text-text-muted hover:bg-glass-hover hover:text-text transition-all duration-200">
             <LayoutGrid size={15} />
           </button>
           <button className="w-[32px] h-[32px] rounded bg-glass border border-glass-border flex items-center justify-center text-text-muted hover:bg-glass-hover hover:text-text transition-all duration-200">
             <ArrowDownNarrowWide size={15} />
+          </button>
+        </div>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Pill tabs */}
+        <div className="flex items-center gap-[2px] bg-[rgba(255,255,255,0.02)] border border-glass-border rounded-[8px] p-[3px] flex-shrink-0">
+          <button
+            onClick={() => onNavigate('library')}
+            className={`${pillBase} ${activeView === 'library' ? pillActive : pillInactive}`}
+          >
+            <Library size={11} />
+            Library
+          </button>
+          <button
+            onClick={() => onNavigate('import')}
+            className={`${pillBase} ${activeView === 'import' ? pillActive : pillInactive}`}
+          >
+            <Upload size={11} />
+            Import
+            <span
+              style={{
+                padding: '1px 4px',
+                background: '#E11D48',
+                borderRadius: 99,
+                fontSize: 7,
+                color: 'white',
+                fontWeight: 600,
+                lineHeight: 1.4,
+              }}
+            >
+              2
+            </span>
+          </button>
+          <button
+            onClick={() => onNavigate('settings')}
+            className={`${pillBase} ${activeView === 'settings' ? pillActive : pillInactive}`}
+          >
+            <Settings size={11} />
+            Settings
           </button>
         </div>
       </header>

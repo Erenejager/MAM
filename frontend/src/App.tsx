@@ -1,6 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
 import { AppShell } from './components/layout/AppShell';
-import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
 // CommandPalette removed — search now expands inline in TopBar
 import { AssetGrid } from './components/assets/AssetGrid';
@@ -78,12 +77,6 @@ export default function App() {
 
   const dropDisabled = isUploading || view === 'import';
 
-  const viewTitle = view === 'library' ? 'Library' : view === 'import' ? 'Import' : 'Settings';
-
-  const sidebar = (
-    <Sidebar activeView={view} onNavigate={handleNavigate} />
-  );
-
   const topBar = (
     <TopBar
       onSearch={handleSearch}
@@ -95,7 +88,7 @@ export default function App() {
       onClearTags={clearTags}
       onSelectAsset={(id) => { setSelectedAssetId(id); setView('library'); }}
       onNavigate={handleNavigate}
-      viewTitle={viewTitle}
+      activeView={view}
     />
   );
 
@@ -104,7 +97,7 @@ export default function App() {
     return (
       <>
         <DropOverlay onFileDrop={handleGlobalDrop} disabled={dropDisabled} />
-        <AppShell sidebar={sidebar} topBar={topBar}>
+        <AppShell topBar={topBar}>
           <DetailPanel
             assetId={selectedAssetId}
             onClose={() => setSelectedAssetId(null)}
@@ -121,7 +114,7 @@ export default function App() {
   return (
     <>
       <DropOverlay onFileDrop={handleGlobalDrop} disabled={dropDisabled} />
-      <AppShell sidebar={sidebar} topBar={topBar}>
+      <AppShell topBar={topBar}>
         {view === 'library' && (
           <AssetGrid
             selectedAssetId={selectedAssetId}
