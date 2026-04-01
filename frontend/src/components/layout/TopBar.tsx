@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Search, X, Upload, Settings, Video, Library } from 'lucide-react';
+import { Search, X, Upload, Settings, Video, Library, LayoutGrid, List } from 'lucide-react';
 import { FilterBar } from './FilterBar';
 import { MediaSphereLogo } from './MediaSphereLogo';
 import { useAssets } from '../../hooks/useAssets';
@@ -17,6 +17,8 @@ interface TopBarProps {
   activeView: 'library' | 'import' | 'settings';
   isIngesting?: boolean;
   completedSinceLastVisit?: number;
+  viewMode: 'grid' | 'list';
+  onViewModeChange: (mode: 'grid' | 'list') => void;
 }
 
 export function TopBar({
@@ -32,6 +34,8 @@ export function TopBar({
   activeView,
   isIngesting,
   completedSinceLastVisit,
+  viewMode,
+  onViewModeChange,
 }: TopBarProps) {
   const [expanded, setExpanded] = useState(false);
   const [inputValue, setInputValue] = useState(searchQuery);
@@ -221,6 +225,43 @@ export function TopBar({
 
         {/* Spacer to center search */}
         <div className="flex-1" />
+
+        {/* View toggle — grid vs list */}
+        <div
+          role="radiogroup"
+          aria-label="View mode"
+          className="flex items-center bg-[rgba(255,255,255,0.02)] border border-glass-border rounded-[6px] overflow-hidden shrink-0"
+        >
+          <button
+            role="radio"
+            aria-checked={viewMode === 'grid'}
+            onClick={() => onViewModeChange('grid')}
+            style={{ padding: '5px 10px' }}
+            className={`flex items-center justify-center transition-colors${viewMode === 'grid' ? ' bg-cta/10' : ''}`}
+            aria-label="Grid view"
+          >
+            <LayoutGrid
+              size={13}
+              style={{ color: viewMode === 'grid' ? '#E11D48' : '#52525b' }}
+              className={viewMode === 'grid' ? '' : 'hover:!text-[#71717a]'}
+            />
+          </button>
+          <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.07)' }} />
+          <button
+            role="radio"
+            aria-checked={viewMode === 'list'}
+            onClick={() => onViewModeChange('list')}
+            style={{ padding: '5px 10px' }}
+            className={`flex items-center justify-center transition-colors${viewMode === 'list' ? ' bg-cta/10' : ''}`}
+            aria-label="List view"
+          >
+            <List
+              size={13}
+              style={{ color: viewMode === 'list' ? '#E11D48' : '#52525b' }}
+              className={viewMode === 'list' ? '' : 'hover:!text-[#71717a]'}
+            />
+          </button>
+        </div>
 
         {/* Pill tabs */}
         <div className="flex items-center gap-[2px] bg-[rgba(255,255,255,0.02)] border border-glass-border rounded-[8px] p-[3px] flex-shrink-0">

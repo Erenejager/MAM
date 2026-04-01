@@ -22,6 +22,16 @@ export default function App() {
     timestamp: number;
   } | null>(null);
 
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    const saved = localStorage.getItem('mam-view-mode');
+    return saved === 'list' ? 'list' : 'grid';
+  });
+
+  const handleViewModeChange = useCallback((mode: 'grid' | 'list') => {
+    setViewMode(mode);
+    localStorage.setItem('mam-view-mode', mode);
+  }, []);
+
   const { selectedTags, toggleTag, clearTags } = useTagFilter();
   const { data: searchData } = useSearch(searchQuery, selectedTags);
 
@@ -114,6 +124,8 @@ export default function App() {
       activeView={view}
       isIngesting={isIngesting}
       completedSinceLastVisit={completedSinceLastVisit}
+      viewMode={viewMode}
+      onViewModeChange={handleViewModeChange}
     />
   );
 
@@ -150,6 +162,7 @@ export default function App() {
             selectedTags={selectedTags}
             onToggleTag={toggleTag}
             onClearTags={clearTags}
+            viewMode={viewMode}
           />
         )}
         {view === 'settings' && <SettingsPage />}
