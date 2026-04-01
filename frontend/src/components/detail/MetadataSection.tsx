@@ -4,6 +4,7 @@ import { InlineEditText } from './InlineEditText';
 import { InlineEditTextarea } from './InlineEditTextarea';
 import { TagEditor } from './TagEditor';
 import { usePatchAsset, usePatchTags } from '../../hooks/useAssets';
+import { toast } from 'sonner';
 
 interface MetadataSectionProps {
   asset: Asset;
@@ -16,15 +17,30 @@ export function MetadataSection({ asset }: MetadataSectionProps) {
   const parsedTags = JSON.parse(asset.tags ?? '[]') as string[];
 
   const handleSaveTitle = async (newValue: string) => {
-    await patchAsset.mutateAsync({ id: asset.id, data: { title: newValue || undefined } });
+    try {
+      await patchAsset.mutateAsync({ id: asset.id, data: { title: newValue || undefined } });
+      toast.success('Saved');
+    } catch {
+      toast.error('Failed to save');
+    }
   };
 
   const handleSaveDescription = async (newValue: string) => {
-    await patchAsset.mutateAsync({ id: asset.id, data: { description: newValue || undefined } });
+    try {
+      await patchAsset.mutateAsync({ id: asset.id, data: { description: newValue || undefined } });
+      toast.success('Saved');
+    } catch {
+      toast.error('Failed to save');
+    }
   };
 
   const handleTagsChange = async (newTags: string[]) => {
-    await patchTags.mutateAsync({ id: asset.id, tags: newTags });
+    try {
+      await patchTags.mutateAsync({ id: asset.id, tags: newTags });
+      toast.success('Saved');
+    } catch {
+      toast.error('Failed to save');
+    }
   };
 
   return (

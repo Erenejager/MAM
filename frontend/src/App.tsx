@@ -8,6 +8,7 @@ import { DetailPanel } from './components/detail/DetailPanel';
 import { ImportView } from './components/ImportView';
 import { SettingsPage } from './components/settings/SettingsPage';
 import { DropOverlay } from './components/upload/DropOverlay';
+import { Toaster } from './components/ui/sonner';
 import { useSearch } from './hooks/useSearch';
 import { useTagFilter } from './hooks/useTagFilter';
 import type { SearchResult } from './types/asset';
@@ -131,6 +132,7 @@ export default function App() {
           onNavigate={handleNavigate}
           onSearch={handleSearch}
         />
+        <Toaster position="bottom-right" theme="dark" />
       </>
     );
   }
@@ -161,6 +163,7 @@ export default function App() {
         onNavigate={handleNavigate}
         onSearch={handleSearch}
       />
+      <Toaster position="bottom-right" theme="dark" />
     </>
   );
 }
