@@ -53,9 +53,15 @@ export default function App() {
     (target: 'library' | 'settings' | 'import') => {
       setView(target);
       if (target === 'import') setCompletedSinceLastVisit(0);
-      if (target !== 'library') setSelectedAssetId(null);
+      if (target === 'library') {
+        setSearchQuery('');
+        clearTags();
+        setSelectedAssetId(null);
+      } else {
+        setSelectedAssetId(null);
+      }
     },
-    []
+    [clearTags]
   );
 
   const handleImportComplete = useCallback(() => {
