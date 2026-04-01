@@ -202,13 +202,14 @@ export async function runPipeline(assetId: string): Promise<void> {
       frameRate: meta.frameRate,
     });
   } catch (err) {
+    console.error(`[pipeline] Stage 1 (metadata) failed for ${assetId}:`, err);
     // Hard failure: delete dir + record, leave no orphan
     await rm(assetDir, { recursive: true, force: true }).catch(() => {});
     db.delete(assets).where(eq(assets.id, assetId)).run();
     return;
   }
 
-  // ── Stage 2: Thumbnail (hard failure — asset unusable without visual) ─────
+  // ── Stage 2: Thumbnail (soft failure — asset still usable without thumbnail) ─
   updateAsset(assetId, { thumbnailStatus: 'processing' });
   const thumbnailAbsPath = resolve(assetDir, 'thumbnail.jpg');
   const thumbnailRelPath = `${assetId}/thumbnail.jpg`;
@@ -219,9 +220,9 @@ export async function runPipeline(assetId: string): Promise<void> {
       thumbnailPath: thumbnailRelPath,
     });
   } catch (err) {
-    await rm(assetDir, { recursive: true, force: true }).catch(() => {});
-    db.delete(assets).where(eq(assets.id, assetId)).run();
-    return;
+    console.error(`[pipeline] Stage 2 (thumbnail) failed for ${assetId}:`, err);
+    updateAsset(assetId, { thumbnailStatus: 'failed' });
+    // Continue — asset is still playable without a thumbnail
   }
 
   // ── Stage 3: Transcription (soft failure — asset usable without transcript) ─
@@ -240,6 +241,7 @@ export async function runPipeline(assetId: string): Promise<void> {
         transcriptPath: transcriptRelPath,
       });
     } catch (err) {
+      console.error(`[pipeline] Stage 3 (transcription) failed for ${assetId}:`, err);
       updateAsset(assetId, {
         transcriptionStatus: 'failed',
         transcriptionError: err instanceof Error ? err.message : String(err),
