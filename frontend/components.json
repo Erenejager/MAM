@@ -17,5 +17,10 @@
     "ui": "@/components/ui",
     "lib": "@/lib",
     "hooks": "@/hooks"
+  },
+  "registries": {
+    "@react-bits": {
+      "url": "https://reactbits.dev/r"
+    }
   }
 }
