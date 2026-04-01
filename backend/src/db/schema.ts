@@ -24,6 +24,9 @@ export const assets = sqliteTable('assets', {
   thumbnailPath: text('thumbnail_path'),
   thumbnailStatus: text('thumbnail_status').default('pending'),
 
+  // Preview frames
+  framesStatus: text('frames_status').default('pending'),
+
   // Transcription
   transcriptPath: text('transcript_path'),
   transcriptText: text('transcript_text'),

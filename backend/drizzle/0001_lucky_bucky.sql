@@ -1,0 +1,1 @@
+ALTER TABLE `assets` ADD COLUMN `frames_status` text DEFAULT 'pending';
