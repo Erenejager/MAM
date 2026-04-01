@@ -133,8 +133,8 @@ export function AssetCard({
         </div>
       )}
 
-      {/* Default bottom gradient */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+      {/* Default bottom gradient — fades out on hover as metadata overlay takes over */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent group-hover:opacity-0 transition-opacity duration-200" />
 
       {/* Top-left: status badge (compact) */}
       <div className="absolute top-xs left-xs">
@@ -151,9 +151,9 @@ export function AssetCard({
         </div>
       )}
 
-      {/* Bottom: title only (compact) — hides on hover since overlay takes over */}
-      <div className="absolute bottom-0 left-0 right-0 px-sm pb-xs group-hover:opacity-0 transition-opacity duration-200">
-        <h3 className="text-xs font-semibold text-white truncate leading-tight">
+      {/* Bottom: title — always visible, sits above overlays */}
+      <div className="absolute bottom-0 left-0 right-0 px-sm pb-xs z-[6]">
+        <h3 className="text-xs font-semibold text-white truncate leading-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
           {displayTitle}
         </h3>
       </div>
