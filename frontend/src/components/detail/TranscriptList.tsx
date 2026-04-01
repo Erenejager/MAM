@@ -87,12 +87,20 @@ export function TranscriptList({ asset, videoRef, segments, loading }: Transcrip
     const el = segmentRefs.current.get(match.segmentIndex);
     el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 
+    // Auto-seek video to matched segment and pause
+    const video = videoRef.current;
+    const seg = segments[match.segmentIndex];
+    if (video && seg) {
+      video.currentTime = seg.start;
+      video.pause();
+    }
+
     userNavigatingRef.current = true;
     clearTimeout(scrollTimeoutRef.current);
     scrollTimeoutRef.current = setTimeout(() => {
       userNavigatingRef.current = false;
     }, 3000);
-  }, [currentMatchIdx, matches, totalMatches]);
+  }, [currentMatchIdx, matches, totalMatches, segments, videoRef]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -168,29 +176,36 @@ export function TranscriptList({ asset, videoRef, segments, loading }: Transcrip
       <span className="absolute w-px h-px overflow-hidden" style={{ clip: 'rect(0,0,0,0)' }} aria-live="polite">
         {query && (totalMatches > 0 ? `${currentMatchIdx + 1} of ${totalMatches} matches` : 'No matches')}
       </span>
-      <div className="overflow-y-auto flex-1">
+      <div className="overflow-y-auto flex-1 px-[8px] py-[4px] flex flex-col gap-[2px]">
         {segments.map((seg, i) => (
           <button
             key={i}
             ref={el => { if (el) segmentRefs.current.set(i, el); else segmentRefs.current.delete(i); }}
             onClick={() => handleSeek(seg.start, i)}
             className={cn(
-              'w-full text-left px-md py-xs cursor-pointer transition-colors duration-150 border-b border-glass-border',
+              'w-full text-left cursor-pointer transition-all duration-150',
+              'px-[10px] py-[7px]',
               i === activeIndex
-                ? 'bg-glass-hover border-l-2 border-l-cta'
-                : 'hover:bg-glass-hover'
+                ? 'rounded-lg'
+                : 'hover:bg-[rgba(255,255,255,0.03)]',
+              i < activeIndex && i !== activeIndex && 'opacity-50'
             )}
+            style={i === activeIndex ? {
+              background: 'rgba(225,29,72,0.06)',
+              border: '1px solid rgba(225,29,72,0.15)',
+              boxShadow: '0 0 12px rgba(225,29,72,0.08)',
+            } : undefined}
           >
             <div className="flex items-baseline gap-sm">
               <span className={cn(
                 'font-mono text-[10px] shrink-0 tabular-nums leading-none',
-                i === activeIndex ? 'text-cta' : 'text-text-dim'
+                i === activeIndex ? 'text-cta' : 'text-[#71717a]'
               )}>
                 {formatTimecode(seg.start)}
               </span>
               <span className={cn(
                 'text-xs leading-relaxed',
-                i === activeIndex ? 'text-text' : 'text-text-muted'
+                i === activeIndex ? 'text-[#e4e4e7]' : i < activeIndex ? 'text-[#71717a]' : 'text-[#94A3B8]'
               )}>
                 {highlightText(seg.text, query, i, matches, currentMatchIdx)}
               </span>
