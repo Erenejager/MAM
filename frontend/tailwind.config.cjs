@@ -15,6 +15,7 @@ module.exports = {
     },
     extend: {
       colors: {
+        /* Cinema Dark theme tokens */
         background: '#0c0c12',
         'background-deep': '#09090e',
         panel: '#141419',
@@ -30,6 +31,47 @@ module.exports = {
         'status-processing': '#F59E0B',
         'status-complete': '#10B981',
         'status-failed': '#E11D48',
+        /* shadcn/ui semantic tokens (CSS variable-backed) */
+        foreground: 'var(--foreground)',
+        card: {
+          DEFAULT: 'var(--card)',
+          foreground: 'var(--card-foreground)',
+        },
+        popover: {
+          DEFAULT: 'var(--popover)',
+          foreground: 'var(--popover-foreground)',
+        },
+        primary: {
+          DEFAULT: 'var(--primary)',
+          foreground: 'var(--primary-foreground)',
+        },
+        secondary: {
+          DEFAULT: 'var(--secondary)',
+          foreground: 'var(--secondary-foreground)',
+        },
+        muted: {
+          DEFAULT: 'var(--muted)',
+          foreground: 'var(--muted-foreground)',
+        },
+        accent: {
+          DEFAULT: 'var(--accent)',
+          foreground: 'var(--accent-foreground)',
+        },
+        destructive: {
+          DEFAULT: 'var(--destructive)',
+        },
+        input: 'var(--input)',
+        ring: 'var(--ring)',
+        sidebar: {
+          DEFAULT: 'var(--sidebar)',
+          foreground: 'var(--sidebar-foreground)',
+          primary: 'var(--sidebar-primary)',
+          'primary-foreground': 'var(--sidebar-primary-foreground)',
+          accent: 'var(--sidebar-accent)',
+          'accent-foreground': 'var(--sidebar-accent-foreground)',
+          border: 'var(--sidebar-border)',
+          ring: 'var(--sidebar-ring)',
+        },
       },
       fontFamily: {
         sans: ['Fira Sans', 'sans-serif'],
@@ -47,6 +89,8 @@ module.exports = {
         DEFAULT: '8px',
         lg: '12px',
         xl: '16px',
+        sm: 'calc(var(--radius) - 4px)',
+        md: 'calc(var(--radius) - 2px)',
       },
     },
   },

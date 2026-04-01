@@ -95,3 +95,56 @@ mark {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+
+@layer base {
+  .theme {
+    --font-heading: var(--font-mono);
+    --font-sans: 'Fira Sans', sans-serif;
+    --font-mono: 'Fira Code', monospace;
+  }
+  :root {
+    /* Cinema Dark — single dark theme, no light variant */
+    --background: #0c0c12;
+    --foreground: #e4e4e7;
+    --card: #141419;
+    --card-foreground: #e4e4e7;
+    --popover: #1a1a22;
+    --popover-foreground: #e4e4e7;
+    --primary: #E11D48;
+    --primary-foreground: #e4e4e7;
+    --secondary: #1a1a22;
+    --secondary-foreground: #e4e4e7;
+    --muted: #1a1a22;
+    --muted-foreground: #a1a1aa;
+    --accent: #1a1a22;
+    --accent-foreground: #e4e4e7;
+    --destructive: #E11D48;
+    --border: rgba(255, 255, 255, 0.06);
+    --input: rgba(255, 255, 255, 0.06);
+    --ring: #E11D48;
+    --chart-1: #E11D48;
+    --chart-2: #10B981;
+    --chart-3: #F59E0B;
+    --chart-4: #3B82F6;
+    --chart-5: #8B5CF6;
+    --radius: 0.5rem;
+    --sidebar: #141419;
+    --sidebar-foreground: #e4e4e7;
+    --sidebar-primary: #E11D48;
+    --sidebar-primary-foreground: #e4e4e7;
+    --sidebar-accent: #1a1a22;
+    --sidebar-accent-foreground: #e4e4e7;
+    --sidebar-border: rgba(255, 255, 255, 0.06);
+    --sidebar-ring: #E11D48;
+  }
+  * {
+    border-color: var(--border);
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+  html {
+    font-family: 'Fira Sans', sans-serif;
+  }
+}
