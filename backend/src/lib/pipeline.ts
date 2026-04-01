@@ -91,6 +91,40 @@ function captureThumbnail(
   });
 }
 
+// ─── Stage 2b: Preview frames for scrub preview ──────────────────────────────
+
+function captureFrame(
+  filePath: string,
+  outputPath: string,
+  seekTime: number,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    ffmpeg(filePath)
+      .screenshots({
+        count: 1,
+        timemarks: [String(seekTime)],
+        filename: basename(outputPath),
+        folder: dirname(outputPath),
+        size: '?x360',
+      })
+      .on('end', () => resolve())
+      .on('error', (err: Error) => reject(err));
+  });
+}
+
+async function generatePreviewFrames(
+  filePath: string,
+  assetDir: string,
+  durationSeconds: number,
+): Promise<void> {
+  const frameCount = 6;
+  for (let i = 0; i < frameCount; i++) {
+    const seekTime = durationSeconds * (i + 0.5) / frameCount;
+    const outputPath = resolve(assetDir, `frame_${i}.jpg`);
+    await captureFrame(filePath, outputPath, seekTime);
+  }
+}
+
 // ─── Stage 3: Groq transcription ─────────────────────────────────────────────
 
 interface Segment {
@@ -223,6 +257,16 @@ export async function runPipeline(assetId: string): Promise<void> {
     console.error(`[pipeline] Stage 2 (thumbnail) failed for ${assetId}:`, err);
     updateAsset(assetId, { thumbnailStatus: 'failed' });
     // Continue — asset is still playable without a thumbnail
+  }
+
+  // ── Stage 2b: Preview frames (soft failure) ────────────────────────────────
+  updateAsset(assetId, { framesStatus: 'processing' });
+  try {
+    await generatePreviewFrames(filePath, assetDir, meta.durationSeconds);
+    updateAsset(assetId, { framesStatus: 'complete' });
+  } catch (err) {
+    console.error(`[pipeline] Stage 2b (preview frames) failed for ${assetId}:`, err);
+    updateAsset(assetId, { framesStatus: 'failed' });
   }
 
   // ── Stage 3: Transcription (soft failure — asset usable without transcript) ─
