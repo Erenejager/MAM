@@ -1,20 +1,36 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export function Logo() {
   const [hovering, setHovering] = useState(false);
+  const [displayText, setDisplayText] = useState('MAM');
+
+  useEffect(() => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let frame = 0;
+    const interval = setInterval(() => {
+      frame++;
+      if (frame > 8) { setDisplayText('MAM'); clearInterval(interval); return; }
+      setDisplayText(
+        Array.from({ length: 3 }, (_, i) =>
+          frame > i * 2 + 2 ? 'MAM'[i] : chars[Math.floor(Math.random() * chars.length)]
+        ).join('')
+      );
+    }, 60);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div
-      className="relative cursor-default select-none"
+      className="relative cursor-default select-none flex items-center gap-sm"
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
     >
       {/* Main logo text */}
       <span
-        className="font-mono text-[18px] font-semibold tracking-[5px] text-text relative inline-block"
-        style={{ letterSpacing: '5px' }}
+        className="font-mono text-[16px] font-semibold tracking-[4px] text-text relative inline-block leading-none"
+        style={{ letterSpacing: '4px' }}
       >
-        MAM
+        {displayText}
         {/* Red flare dot - sweeps right */}
         {hovering && (
           <span
@@ -48,17 +64,17 @@ export function Logo() {
           />
         )}
       </span>
-      {/* Subtitle reveal on hover */}
-      <div
-        className="absolute top-full left-0 mt-[2px] whitespace-nowrap font-sans text-[9px] tracking-[4px] uppercase transition-all duration-300"
+      {/* Subtitle - inline, reveals on hover */}
+      <span
+        className="font-sans text-[9px] tracking-[3px] uppercase transition-all duration-300 leading-none"
         style={{
-          color: hovering ? 'var(--color-text-dim)' : 'transparent',
+          color: hovering ? 'var(--color-text-dim, #52525b)' : 'transparent',
           opacity: hovering ? 1 : 0,
-          transform: hovering ? 'translateY(0)' : 'translateY(-2px)',
+          transform: hovering ? 'translateX(0)' : 'translateX(-4px)',
         }}
       >
         Media Asset Manager
-      </div>
+      </span>
     </div>
   );
 }
