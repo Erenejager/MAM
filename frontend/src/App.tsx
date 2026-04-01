@@ -1,8 +1,8 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { AppShell } from './components/layout/AppShell';
 import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
-import { CommandPalette } from './components/layout/CommandPalette';
+// CommandPalette removed — search now expands inline in TopBar
 import { AssetGrid } from './components/assets/AssetGrid';
 import { DetailPanel } from './components/detail/DetailPanel';
 import { ImportView } from './components/ImportView';
@@ -17,7 +17,6 @@ export default function App() {
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [view, setView] = useState<'library' | 'settings' | 'import'>('library');
   const [searchQuery, setSearchQuery] = useState('');
-  const [cmdOpen, setCmdOpen] = useState(false);
   const [pendingSeek, setPendingSeek] = useState<{
     tab: 'transcript';
     timestamp: number;
@@ -58,18 +57,6 @@ export default function App() {
     []
   );
 
-  // Cmd/Ctrl+K keyboard shortcut for command palette
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setCmdOpen((prev) => !prev);
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
   const [isUploading, setIsUploading] = useState(false);
 
   const handleGlobalDrop = useCallback(
@@ -106,7 +93,8 @@ export default function App() {
       selectedTags={selectedTags}
       onToggleTag={toggleTag}
       onClearTags={clearTags}
-      onOpenCommandPalette={() => setCmdOpen(true)}
+      onSelectAsset={(id) => { setSelectedAssetId(id); setView('library'); }}
+      onNavigate={handleNavigate}
       viewTitle={viewTitle}
     />
   );
@@ -125,13 +113,6 @@ export default function App() {
             onOpened={() => setPendingSeek(null)}
           />
         </AppShell>
-        <CommandPalette
-          open={cmdOpen}
-          onOpenChange={setCmdOpen}
-          onSelectAsset={(id) => { setSelectedAssetId(id); setView('library'); }}
-          onNavigate={handleNavigate}
-          onSearch={handleSearch}
-        />
         <Toaster position="bottom-right" theme="dark" />
       </>
     );
@@ -156,13 +137,6 @@ export default function App() {
         {view === 'settings' && <SettingsPage />}
         {view === 'import' && <ImportView />}
       </AppShell>
-      <CommandPalette
-        open={cmdOpen}
-        onOpenChange={setCmdOpen}
-        onSelectAsset={(id) => { setSelectedAssetId(id); setView('library'); }}
-        onNavigate={handleNavigate}
-        onSearch={handleSearch}
-      />
       <Toaster position="bottom-right" theme="dark" />
     </>
   );
