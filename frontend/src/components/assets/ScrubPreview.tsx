@@ -26,6 +26,8 @@ export function ScrubPreview({ asset, containerRef }: ScrubPreviewProps) {
   const framesAvailable = asset.framesStatus === 'complete';
   const tags: string[] = asset.tags ? JSON.parse(asset.tags) : [];
 
+  const [hovering, setHovering] = useState(false);
+
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
       const el = containerRef.current;
@@ -35,6 +37,7 @@ export function ScrubPreview({ asset, containerRef }: ScrubPreviewProps) {
       const ratio = x / rect.width;
       setProgressX(ratio);
       setTooltipX(x);
+      setHovering(true);
       if (framesAvailable) {
         setFrameIndex(Math.min(Math.floor(ratio * 6), 5));
       }
@@ -45,6 +48,7 @@ export function ScrubPreview({ asset, containerRef }: ScrubPreviewProps) {
   const handleMouseLeave = useCallback(() => {
     setFrameIndex(null);
     setProgressX(0);
+    setHovering(false);
   }, []);
 
   const currentTime = progressX * duration;
@@ -77,7 +81,7 @@ export function ScrubPreview({ asset, containerRef }: ScrubPreviewProps) {
       )}
 
       {/* Timecode tooltip */}
-      {frameIndex !== null && (
+      {hovering && duration > 0 && (
         <div
           className="absolute pointer-events-none font-mono text-[9px] px-[6px] py-[1px] z-[4]"
           style={{
@@ -96,7 +100,7 @@ export function ScrubPreview({ asset, containerRef }: ScrubPreviewProps) {
       )}
 
       {/* Scrub progress bar */}
-      {frameIndex !== null && (
+      {hovering && (
         <div
           className="absolute left-0 right-0 z-[5]"
           style={{ bottom: '30%', height: 3, background: 'rgba(255,255,255,0.08)' }}
