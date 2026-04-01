@@ -151,8 +151,8 @@ export function AssetCard({
         </div>
       )}
 
-      {/* Bottom: title — slides up into metadata overlay position on hover */}
-      <div className="absolute left-0 right-0 px-sm z-[6] transition-all duration-200 bottom-[4px] group-hover:bottom-[38%]">
+      {/* Bottom: title — slides up into metadata overlay on hover */}
+      <div className="absolute left-0 right-0 px-[10px] z-[6] transition-all duration-200 bottom-[4px] group-hover:bottom-[calc(40%-22px)]">
         <h3 className="text-xs font-semibold text-white truncate leading-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
           {displayTitle}
         </h3>
