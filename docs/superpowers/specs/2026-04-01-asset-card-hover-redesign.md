@@ -44,13 +44,24 @@ When no search is active and the user hovers an asset card, the mouse position (
 - Shows the timestamp corresponding to the mouse position: `(mouseX / cardWidth) * duration`
 - Format: `M:SS`
 
-**Enhanced bottom bar (visible on hover):**
-- Bottom gradient enriched from current: add duration, file size, and tag pills
-- Title: existing `text-xs font-semibold text-white truncate`
-- Below title: `duration · fileSize` in Fira Code 10px `#71717a`
-- Below that: tag pills (max 4) — `text-[8px] px-[6px] py-[1px] bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.08)] rounded text-[#a1a1aa]`
+**Metadata gradient overlay (visible on hover):**
 
-**Mouse leave:** Revert to original thumbnail, hide progress bar and tooltip.
+Same gradient approach as search hover — frame stays full size, info fades in at the bottom.
+
+Container:
+- `position: absolute; bottom: 0; left: 0; right: 0`
+- `background: linear-gradient(transparent 0%, rgba(10,10,20,0.7) 25%, rgba(10,10,20,0.92) 100%)`
+- `padding: 32px 10px 10px`
+- `opacity: 0` → `opacity: 1` on hover, `transition: opacity 200ms ease-out`
+
+Content (top to bottom):
+- **Title:** `text-xs font-semibold text-white truncate`
+- **Metadata row:** `duration · resolution · codec · fileSize` in Fira Code 10px `#71717a`, dot-separated
+- **Creation date:** `Imported {relative date}` (e.g., "Imported 3 days ago" or "Imported Mar 28") in `text-[10px] text-[#52525b]`
+- **Tags:** pills (max 4) — `text-[8px] px-[6px] py-[1px] bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.08)] rounded text-[#a1a1aa]`
+- **Description:** 1-line truncated preview if available — `text-[10px] text-[#71717a] italic truncate`
+
+**Mouse leave:** Revert to original thumbnail, hide progress bar, tooltip, and overlay.
 
 ---
 
