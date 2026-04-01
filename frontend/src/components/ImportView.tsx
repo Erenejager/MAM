@@ -221,10 +221,10 @@ export function ImportView() {
       {view.phase === 'idle' && (
         <div
           className={[
-            'flex flex-col items-center gap-lg p-3xl rounded-xl border-2 border-dashed transition-colors duration-200 cursor-pointer bg-glass glass-blur',
+            'flex flex-col items-center gap-lg p-3xl rounded-xl border border-dashed transition-colors duration-200 cursor-pointer bg-glass glass-blur',
             isDragOver
               ? 'border-cta glow-cta'
-              : 'border-glass-border hover:border-border-hover',
+              : 'border-glass-border',
           ].join(' ')}
           style={{ minWidth: 420 }}
           onClick={() => fileInputRef.current?.click()}
@@ -284,7 +284,7 @@ export function ImportView() {
           className="flex flex-col items-center gap-md p-3xl rounded-xl border border-status-complete/40 bg-glass glass-blur"
           style={{ minWidth: 420 }}
         >
-          <div className="w-12 h-12 rounded-full bg-status-complete/20 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full bg-glass glass-blur border border-glass-border flex items-center justify-center">
             <svg
               className="w-6 h-6 text-status-complete"
               fill="none"
@@ -306,7 +306,7 @@ export function ImportView() {
           className="flex flex-col items-center gap-md p-3xl rounded-xl border border-status-failed/40 bg-glass glass-blur"
           style={{ minWidth: 420 }}
         >
-          <div className="w-12 h-12 rounded-full bg-status-failed/20 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full bg-glass glass-blur border border-glass-border flex items-center justify-center">
             <svg
               className="w-6 h-6 text-status-failed"
               fill="none"
