@@ -15,6 +15,7 @@ interface AssetGridProps {
   selectedTags: string[];
   onToggleTag: (tag: string) => void;
   onClearTags: () => void;
+  viewMode?: 'grid' | 'list';
 }
 
 export function AssetGrid({
@@ -26,6 +27,7 @@ export function AssetGrid({
   selectedTags,
   onToggleTag: _onToggleTag,
   onClearTags: _onClearTags,
+  viewMode: _viewMode = 'grid',
 }: AssetGridProps) {
   const { data: assets = [], isLoading } = useAssets(selectedTags.length > 0 ? selectedTags : undefined);
 

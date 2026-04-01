@@ -242,8 +242,7 @@ export function TopBar({
           >
             <LayoutGrid
               size={13}
-              style={{ color: viewMode === 'grid' ? '#E11D48' : '#52525b' }}
-              className={viewMode === 'grid' ? '' : 'hover:!text-[#71717a]'}
+              className={viewMode === 'grid' ? 'text-cta' : 'text-[#52525b] hover:text-[#71717a] transition-colors'}
             />
           </button>
           <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.07)' }} />
@@ -257,8 +256,7 @@ export function TopBar({
           >
             <List
               size={13}
-              style={{ color: viewMode === 'list' ? '#E11D48' : '#52525b' }}
-              className={viewMode === 'list' ? '' : 'hover:!text-[#71717a]'}
+              className={viewMode === 'list' ? 'text-cta' : 'text-[#52525b] hover:text-[#71717a] transition-colors'}
             />
           </button>
         </div>
