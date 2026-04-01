@@ -14,7 +14,7 @@ export function FilterBar({
   if (selectedTags.length === 0) return null;
 
   return (
-    <div className="flex items-center gap-sm px-lg py-xs bg-panel-light/30 border-b border-border">
+    <div className="flex items-center gap-sm px-md py-xs bg-glass border-b border-glass-border">
       <span className="text-[10px] uppercase tracking-wider text-text-dim shrink-0">
         Filtered by
       </span>
@@ -23,10 +23,10 @@ export function FilterBar({
           <button
             key={tag}
             onClick={() => onToggleTag(tag)}
-            className="flex items-center gap-xs text-[11px] px-sm py-0 rounded-lg bg-cta/15 border border-cta/30 text-text hover:bg-cta/25 transition-colors"
+            className="flex items-center gap-xs text-[11px] px-sm py-0 rounded-full bg-[var(--cta-subtle)] border border-cta/25 text-cta hover:bg-cta/25 transition-colors"
           >
             {tag}
-            <X size={10} className="text-text-muted" />
+            <X size={10} className="text-cta/60" />
           </button>
         ))}
       </div>

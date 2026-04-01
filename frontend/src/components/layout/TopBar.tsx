@@ -1,118 +1,60 @@
-import { useState } from 'react';
-import { Upload, SlidersHorizontal, Settings } from 'lucide-react';
-import { Logo } from './Logo';
-import { SearchInput } from './SearchInput';
-import { FilterDropdown } from './FilterDropdown';
-import { cn } from '../../lib/cn';
+import { Search, LayoutGrid, ArrowDownNarrowWide } from 'lucide-react';
+import { FilterBar } from './FilterBar';
 
 interface TopBarProps {
   onSearch: (query: string) => void;
   onClear: () => void;
   searchQuery: string;
   searchUnavailable?: boolean;
-  onNavigate: (target: 'library' | 'settings' | 'import') => void;
-  activeView: 'library' | 'settings' | 'import';
   selectedTags: string[];
   onToggleTag: (tag: string) => void;
+  onClearTags: () => void;
+  onOpenCommandPalette: () => void;
+  viewTitle: string;
 }
 
 export function TopBar({
-  onSearch,
-  onClear,
   searchQuery,
   searchUnavailable,
-  onNavigate,
-  activeView,
   selectedTags,
   onToggleTag,
+  onClearTags,
+  onOpenCommandPalette,
+  viewTitle,
 }: TopBarProps) {
-  const [filterOpen, setFilterOpen] = useState(false);
-
   return (
-    <header className="relative flex items-center gap-lg px-lg py-sm border-b border-border bg-panel/60 backdrop-blur-sm">
-      {/* Logo - left */}
-      <div
-        className="shrink-0 cursor-pointer pb-sm"
-        onClick={() => onNavigate('library')}
-      >
-        <Logo />
-      </div>
-
-      {/* Search - center, flex-1 */}
-      <div className="flex-1 flex justify-center max-w-xl mx-auto">
-        <SearchInput
-          onSearch={onSearch}
-          onClear={onClear}
-          initialValue={searchQuery}
-        />
-      </div>
-
-      {/* Icon actions - right */}
-      <div className="shrink-0 flex items-center gap-sm">
-        <button
-          onClick={() => onNavigate('import')}
-          className={cn(
-            'p-sm rounded transition-colors',
-            activeView === 'import'
-              ? 'bg-cta text-white'
-              : 'text-text-muted hover:text-text hover:bg-panel-light'
-          )}
-          aria-label="Upload"
-          title="Upload"
-        >
-          <Upload size={18} />
-        </button>
-
-        {/* Filter button + dropdown */}
-        <div className="relative">
-          <button
-            onClick={() => setFilterOpen(!filterOpen)}
-            className={cn(
-              'p-sm rounded transition-colors relative',
-              filterOpen || selectedTags.length > 0
-                ? 'text-cta'
-                : 'text-text-muted hover:text-text hover:bg-panel-light'
-            )}
-            aria-label="Filters"
-            title="Filters"
-          >
-            <SlidersHorizontal size={18} />
-            {selectedTags.length > 0 && (
-              <span className="absolute -top-0 -right-0 w-[14px] h-[14px] bg-cta text-white text-[9px] font-semibold rounded-full flex items-center justify-center">
-                {selectedTags.length}
-              </span>
-            )}
-          </button>
-          {filterOpen && (
-            <FilterDropdown
-              selectedTags={selectedTags}
-              onToggleTag={onToggleTag}
-              onClose={() => setFilterOpen(false)}
-            />
-          )}
-        </div>
-
-        <button
-          onClick={() => onNavigate('settings')}
-          className={cn(
-            'p-sm rounded transition-colors',
-            activeView === 'settings'
-              ? 'bg-cta text-white'
-              : 'text-text-muted hover:text-text hover:bg-panel-light'
-          )}
-          aria-label="Settings"
-          title="Settings"
-        >
-          <Settings size={18} />
-        </button>
-      </div>
-
-      {/* Search unavailable banner */}
+    <div className="shrink-0">
       {searchUnavailable && (
-        <div className="absolute top-full left-0 right-0 bg-cta/10 text-cta text-xs text-center py-xs px-md border-b border-cta/20 z-40">
-          Search unavailable — showing all assets
+        <div className="px-md py-xs bg-cta/10 border-b border-cta/20 text-center text-xs text-cta">
+          Search service unavailable — results limited to local database
         </div>
       )}
-    </header>
+      <header className="h-[52px] bg-[rgba(15,15,30,0.5)] glass-blur-xl border-b border-glass-border flex items-center px-xl gap-sm">
+        <span className="font-mono text-[13px] font-semibold text-text tracking-[0.5px]">
+          {viewTitle}
+        </span>
+        <button
+          onClick={onOpenCommandPalette}
+          className="flex-1 max-w-[420px] py-[7px] px-sm bg-glass border border-glass-border rounded-[10px] text-xs text-text-dim flex items-center gap-sm cursor-pointer transition-all duration-200 hover:bg-glass-hover hover:border-border-hover glass-blur"
+        >
+          <Search size={14} className="opacity-50" />
+          {searchQuery || 'Search assets...'}
+          <span className="ml-auto py-[2px] px-[6px] bg-glass-hover rounded text-[10px] font-mono text-text-dim">
+            ⌘K
+          </span>
+        </button>
+        <div className="ml-auto flex gap-xs">
+          <button className="w-[32px] h-[32px] rounded bg-glass border border-glass-border flex items-center justify-center text-text-muted hover:bg-glass-hover hover:text-text transition-all duration-200">
+            <LayoutGrid size={15} />
+          </button>
+          <button className="w-[32px] h-[32px] rounded bg-glass border border-glass-border flex items-center justify-center text-text-muted hover:bg-glass-hover hover:text-text transition-all duration-200">
+            <ArrowDownNarrowWide size={15} />
+          </button>
+        </div>
+      </header>
+      {selectedTags.length > 0 && (
+        <FilterBar selectedTags={selectedTags} onToggleTag={onToggleTag} onClearTags={onClearTags} />
+      )}
+    </div>
   );
 }
