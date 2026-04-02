@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { useTags } from '../../hooks/useAssets';
 import { cn } from '../../lib/cn';
@@ -45,9 +46,14 @@ export function FilterDropdown({
   );
 
   return (
-    <div
+    <motion.div
       ref={ref}
+      initial={{ opacity: 0, scale: 0.95, y: -4 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95, y: -4 }}
+      transition={{ duration: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
       className="absolute top-full right-0 mt-xs w-[220px] bg-panel border border-border rounded-lg shadow-lg overflow-hidden z-50"
+      style={{ transformOrigin: 'top right' }}
     >
       <div className="p-sm border-b border-border">
         <input
@@ -85,6 +91,6 @@ export function FilterDropdown({
           })}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

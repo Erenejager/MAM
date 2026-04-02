@@ -2,6 +2,7 @@ import { useMemo, useState, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AssetCard } from './AssetCard';
 import { AssetContextMenu } from './AssetContextMenu';
+import { AssetTableView } from './AssetTableView';
 import { DeleteDialog } from '../shared/DeleteDialog';
 import { useAssets } from '../../hooks/useAssets';
 import type { SearchResult } from '../../types/asset';
@@ -115,7 +116,16 @@ export function AssetGrid({
     return (
       <div className="h-full flex flex-col">
         <div className="px-md pt-md pb-0 overflow-y-auto flex-1 flex flex-col">
-          <div className="text-text-dim text-xs">Table view coming soon…</div>
+          <AssetTableView
+            assets={assets}
+            displayAssets={displayAssets}
+            isSearchActive={isSearchActive}
+            searchResults={searchResults}
+            selectedAssetId={selectedAssetId}
+            onSelectAsset={onSelectAsset}
+            onTimecodeClick={onTimecodeClick}
+            onContextMenu={handleContextMenu}
+          />
         </div>
         {contextMenu && (
           <AssetContextMenu
@@ -125,14 +135,16 @@ export function AssetGrid({
             onDelete={handleDeleteFromMenu}
           />
         )}
-        {deleteTarget && (
-          <DeleteDialog
-            assetId={deleteTarget.id}
-            assetTitle={deleteTarget.title}
-            onClose={() => setDeleteTarget(null)}
-            onDeleted={handleDeleted}
-          />
-        )}
+        <AnimatePresence>
+          {deleteTarget && (
+            <DeleteDialog
+              assetId={deleteTarget.id}
+              assetTitle={deleteTarget.title}
+              onClose={() => setDeleteTarget(null)}
+              onDeleted={handleDeleted}
+            />
+          )}
+        </AnimatePresence>
       </div>
     );
   }
@@ -176,14 +188,16 @@ export function AssetGrid({
         )}
 
         {/* Delete dialog */}
-        {deleteTarget && (
-          <DeleteDialog
-            assetId={deleteTarget.id}
-            assetTitle={deleteTarget.title}
-            onClose={() => setDeleteTarget(null)}
-            onDeleted={handleDeleted}
-          />
-        )}
+        <AnimatePresence>
+          {deleteTarget && (
+            <DeleteDialog
+              assetId={deleteTarget.id}
+              assetTitle={deleteTarget.title}
+              onClose={() => setDeleteTarget(null)}
+              onDeleted={handleDeleted}
+            />
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { AlertTriangle } from 'lucide-react';
 import { useDeleteAsset } from '../../hooks/useAssets';
 
@@ -69,15 +70,23 @@ export function DeleteDialog({ assetId, assetTitle, onClose, onDeleted }: Delete
   };
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
       className="fixed inset-0 bg-black/50 glass-blur-sm z-50 flex items-center justify-center"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label="Delete asset"
     >
-      <div
+      <motion.div
         ref={dialogRef}
+        initial={{ opacity: 0, scale: 0.95, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 4 }}
+        transition={{ duration: 0.18, ease: [0.25, 0.46, 0.45, 0.94] }}
         className="w-full max-w-[360px] rounded-[14px] overflow-hidden"
         style={{
           background: 'rgba(15,15,30,0.97)',
@@ -145,7 +154,7 @@ export function DeleteDialog({ assetId, assetTitle, onClose, onDeleted }: Delete
         >
           Cancel
         </button>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

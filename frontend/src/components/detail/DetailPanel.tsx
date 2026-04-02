@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft } from 'lucide-react';
 import { useAsset } from '../../hooks/useAssets';
 import { VideoPlayer } from './VideoPlayer';
@@ -167,31 +168,47 @@ export function DetailPanel({
               </button>
             ))}
             {/* Animated underline indicator */}
-            <div
-              className="absolute bottom-0 h-0.5 bg-cta transition-all duration-300 ease-out"
-              style={{
-                width: `${100 / tabs.length}%`,
-                left: `${(tabs.indexOf(activeTab) * 100) / tabs.length}%`,
-              }}
+            <motion.div
+              className="absolute bottom-0 h-0.5 bg-cta"
+              layoutId="detail-tab-indicator"
+              style={{ width: `${100 / tabs.length}%` }}
+              animate={{ left: `${(tabs.indexOf(activeTab) * 100) / tabs.length}%` }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
             />
           </div>
 
-          {/* Tab content */}
-          {activeTab === 'info' && (
-            <div className="flex-1 overflow-y-auto p-sm">
-              <MetadataSection asset={asset} />
-            </div>
-          )}
-          {activeTab === 'transcript' && (
-            <div className="flex-1 flex flex-col min-h-0">
-              <TranscriptList
-                asset={asset}
-                videoRef={videoRef}
-                segments={segments}
-                loading={segmentsLoading}
-              />
-            </div>
-          )}
+          {/* Tab content with crossfade */}
+          <AnimatePresence mode="wait">
+            {activeTab === 'info' && (
+              <motion.div
+                key="info"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.12 }}
+                className="flex-1 overflow-y-auto p-sm"
+              >
+                <MetadataSection asset={asset} />
+              </motion.div>
+            )}
+            {activeTab === 'transcript' && (
+              <motion.div
+                key="transcript"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.12 }}
+                className="flex-1 flex flex-col min-h-0"
+              >
+                <TranscriptList
+                  asset={asset}
+                  videoRef={videoRef}
+                  segments={segments}
+                  loading={segmentsLoading}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>

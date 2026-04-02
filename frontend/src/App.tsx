@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { AppShell } from './components/layout/AppShell';
 import { TopBar } from './components/layout/TopBar';
 // CommandPalette removed — search now expands inline in TopBar
@@ -129,49 +130,62 @@ export default function App() {
     />
   );
 
-  // Full-screen detail view replaces library content
-  if (selectedAssetId && view === 'library') {
-    return (
-      <>
-        <DropOverlay onFileDrop={handleGlobalDrop} disabled={dropDisabled} />
-        <AppShell topBar={topBar}>
-          <DetailPanel
-            assetId={selectedAssetId}
-            onClose={() => setSelectedAssetId(null)}
-            initialTab={pendingSeek?.tab}
-            seekTimestamp={pendingSeek?.timestamp}
-            onOpened={() => setPendingSeek(null)}
-          />
-        </AppShell>
-        <Toaster position="bottom-right" theme="dark" />
-      </>
-    );
-  }
+  const viewKey = selectedAssetId && view === 'library' ? `detail-${selectedAssetId}` : view;
 
   return (
     <>
       <DropOverlay onFileDrop={handleGlobalDrop} disabled={dropDisabled} />
       <AppShell topBar={topBar}>
-        {view === 'library' && (
-          <AssetGrid
-            selectedAssetId={selectedAssetId}
-            onSelectAsset={setSelectedAssetId}
-            searchResults={searchResults}
-            isSearchActive={searchQuery.trim().length > 0}
-            onTimecodeClick={handleTimecodeClick}
-            selectedTags={selectedTags}
-            onToggleTag={toggleTag}
-            onClearTags={clearTags}
-            viewMode={viewMode}
-          />
-        )}
-        {view === 'settings' && <SettingsPage />}
-        {view === 'import' && (
-          <ImportView
-            onViewAsset={handleViewAssetFromToast}
-            onImportComplete={handleImportComplete}
-          />
-        )}
+        <AnimatePresence mode="wait">
+          {selectedAssetId && view === 'library' ? (
+            <motion.div
+              key={viewKey}
+              initial={{ opacity: 0, x: 40 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
+              className="h-full"
+            >
+              <DetailPanel
+                assetId={selectedAssetId}
+                onClose={() => setSelectedAssetId(null)}
+                initialTab={pendingSeek?.tab}
+                seekTimestamp={pendingSeek?.timestamp}
+                onOpened={() => setPendingSeek(null)}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key={viewKey}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              className="h-full"
+            >
+              {view === 'library' && (
+                <AssetGrid
+                  selectedAssetId={selectedAssetId}
+                  onSelectAsset={setSelectedAssetId}
+                  searchResults={searchResults}
+                  isSearchActive={searchQuery.trim().length > 0}
+                  onTimecodeClick={handleTimecodeClick}
+                  selectedTags={selectedTags}
+                  onToggleTag={toggleTag}
+                  onClearTags={clearTags}
+                  viewMode={viewMode}
+                />
+              )}
+              {view === 'settings' && <SettingsPage />}
+              {view === 'import' && (
+                <ImportView
+                  onViewAsset={handleViewAssetFromToast}
+                  onImportComplete={handleImportComplete}
+                />
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </AppShell>
       <Toaster position="bottom-right" theme="dark" />
     </>

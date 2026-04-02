@@ -1,3 +1,4 @@
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../../lib/cn';
 import { Grid3X3, Upload, Settings, HelpCircle } from 'lucide-react';
 
@@ -35,14 +36,26 @@ export function Sidebar({ activeView, onNavigate, importCount }: SidebarProps) {
           style={{ transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }}
         >
           {activeView === id && (
-            <span className="absolute left-[-14px] w-[3px] h-[20px] bg-cta rounded-r-sm glow-cta-sm" />
+            <motion.span
+              layoutId="sidebar-active"
+              className="absolute left-[-14px] w-[3px] h-[20px] bg-cta rounded-r-sm glow-cta-sm"
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            />
           )}
           <Icon size={18} />
-          {id === 'import' && importCount != null && importCount > 0 && (
-            <span className="absolute -top-[2px] -right-[2px] w-[14px] h-[14px] bg-cta rounded-full text-[8px] flex items-center justify-center text-white font-semibold glow-cta-sm">
-              {importCount}
-            </span>
-          )}
+          <AnimatePresence>
+            {id === 'import' && importCount != null && importCount > 0 && (
+              <motion.span
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+                className="absolute -top-[2px] -right-[2px] w-[14px] h-[14px] bg-cta rounded-full text-[8px] flex items-center justify-center text-white font-semibold glow-cta-sm"
+              >
+                {importCount}
+              </motion.span>
+            )}
+          </AnimatePresence>
         </button>
       ))}
       <div className="flex-1" />

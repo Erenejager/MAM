@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import type { Asset } from '../../types/asset';
 
 interface PreviewCardProps {
@@ -72,169 +73,203 @@ export function PreviewCard({ asset, visible, anchorRect, onMouseEnter, onMouseL
     setScrubbing(false);
   }, []);
 
-  if (!show || !anchorRect) return null;
-
-  // Smart vertical positioning: center on row, flip if near edges
+  // Compute position even when not showing (needed for exit animation)
   const cardHeight = cardRef.current?.offsetHeight ?? 250;
-  const rowCenterY = (anchorRect.top + anchorRect.bottom) / 2;
+  const rowCenterY = anchorRect ? (anchorRect.top + anchorRect.bottom) / 2 : 0;
   let top = rowCenterY - cardHeight / 2;
-
-  // Clamp to viewport
   if (top < 8) top = 8;
-  if (top + cardHeight > window.innerHeight - 8) {
+  if (anchorRect && top + cardHeight > window.innerHeight - 8) {
     top = window.innerHeight - cardHeight - 8;
   }
 
   const currentTime = progressX * duration;
 
   return createPortal(
-    <div
-      ref={cardRef}
-      aria-hidden="true"
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-      style={{
-        position: 'fixed',
-        left: anchorRect.left,
-        top,
-        width: CARD_WIDTH,
-        zIndex: 50,
-        borderRadius: 8,
-        border: '1px solid #2D2A5E',
-        background: '#1E1B4B',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-        overflow: 'hidden',
-        pointerEvents: 'auto',
-        opacity: 1,
-        transition: 'opacity 150ms ease-out',
-      }}
-    >
-      {/* Scrubbable thumbnail area */}
-      <div
-        style={{
-          width: CARD_WIDTH,
-          height: THUMB_HEIGHT,
-          position: 'relative',
-          cursor: framesAvailable ? 'col-resize' : 'default',
-        }}
-        onMouseMove={handleScrubMove}
-        onMouseLeave={handleScrubLeave}
-      >
-        {/* Base thumbnail */}
-        <img
-          src={`/storage/${asset.id}/thumbnail.jpg`}
-          alt=""
+    <AnimatePresence>
+      {show && anchorRect && (
+        <motion.div
+          ref={cardRef}
+          aria-hidden="true"
+          onMouseEnter={onMouseEnter}
+          onMouseLeave={onMouseLeave}
+          initial={{ opacity: 0, scale: 0.95, y: 6 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.97, y: 4 }}
+          transition={{ duration: 0.18, ease: [0.25, 0.46, 0.45, 0.94] }}
           style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            display: 'block',
+            position: 'fixed',
+            left: anchorRect.left,
+            top,
+            width: CARD_WIDTH,
+            zIndex: 50,
+            borderRadius: 8,
+            border: '1px solid #2D2A5E',
+            background: '#1E1B4B',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+            overflow: 'hidden',
+            pointerEvents: 'auto',
+            transformOrigin: 'left center',
           }}
-        />
-
-        {/* Scrub frame overlay */}
-        {frameIndex !== null && framesAvailable && (
-          <img
-            src={`/storage/${asset.id}/frame_${frameIndex}.jpg`}
-            alt=""
-            style={{
-              position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-            }}
-          />
-        )}
-
-        {/* Timecode tooltip */}
-        {scrubbing && duration > 0 && (
+        >
+          {/* Scrubbable thumbnail area */}
           <div
             style={{
-              position: 'absolute',
-              bottom: 12,
-              left: tooltipX,
-              transform: 'translateX(-50%)',
-              background: 'rgba(15,15,30,0.95)',
-              backdropFilter: 'blur(8px)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 4,
-              padding: '1px 6px',
-              fontFamily: 'Fira Code, monospace',
-              fontSize: 9,
-              color: '#e4e4e7',
-              pointerEvents: 'none',
+              width: CARD_WIDTH,
+              height: THUMB_HEIGHT,
+              position: 'relative',
+              cursor: framesAvailable ? 'col-resize' : 'default',
             }}
+            onMouseMove={handleScrubMove}
+            onMouseLeave={handleScrubLeave}
           >
-            {formatTime(currentTime)}
-          </div>
-        )}
-
-        {/* Progress bar */}
-        {scrubbing && (
-          <div
-            style={{
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              bottom: 0,
-              height: 3,
-              background: 'rgba(255,255,255,0.08)',
-            }}
-          >
-            <div
+            {/* Base thumbnail */}
+            <img
+              src={`/storage/${asset.id}/thumbnail.jpg`}
+              alt=""
               style={{
-                width: `${progressX * 100}%`,
+                width: '100%',
                 height: '100%',
-                background: '#E11D48',
-                boxShadow: '0 0 6px rgba(225,29,72,0.3)',
+                objectFit: 'cover',
+                display: 'block',
               }}
             />
-          </div>
-        )}
-      </div>
 
-      {/* Metadata area — only render if there's content */}
-      {(tags.length > 0 || hasDescription) && (
-        <div style={{ padding: '8px 10px 10px' }}>
-          {/* Tags */}
-          {tags.length > 0 && (
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: hasDescription ? 6 : 0 }}>
-              {tags.map((tag) => (
-                <span
-                  key={tag}
+            {/* Scrub frame overlay with crossfade */}
+            <AnimatePresence mode="popLayout">
+              {frameIndex !== null && framesAvailable && (
+                <motion.img
+                  key={frameIndex}
+                  src={`/storage/${asset.id}/frame_${frameIndex}.jpg`}
+                  alt=""
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.12 }}
                   style={{
+                    position: 'absolute',
+                    inset: 0,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                  }}
+                />
+              )}
+            </AnimatePresence>
+
+            {/* Timecode tooltip */}
+            <AnimatePresence>
+              {scrubbing && duration > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 4 }}
+                  transition={{ duration: 0.1 }}
+                  style={{
+                    position: 'absolute',
+                    bottom: 12,
+                    left: tooltipX,
+                    transform: 'translateX(-50%)',
+                    background: 'rgba(15,15,30,0.95)',
+                    backdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: 4,
+                    padding: '1px 6px',
                     fontFamily: 'Fira Code, monospace',
                     fontSize: 9,
-                    color: '#a1a1aa',
-                    background: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.06)',
-                    borderRadius: 3,
-                    padding: '1px 6px',
+                    color: '#e4e4e7',
+                    pointerEvents: 'none',
                   }}
                 >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
+                  {formatTime(currentTime)}
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-          {/* Description */}
-          {hasDescription && (
-            <div
-              style={{
-                fontSize: 11,
-                fontStyle: 'italic',
-                color: '#a1a1aa',
-                lineHeight: 1.5,
-              }}
+            {/* Progress bar */}
+            <AnimatePresence>
+              {scrubbing && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.12 }}
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: 3,
+                    background: 'rgba(255,255,255,0.08)',
+                  }}
+                >
+                  <motion.div
+                    animate={{ width: `${progressX * 100}%` }}
+                    transition={{ duration: 0.06, ease: 'linear' }}
+                    style={{
+                      height: '100%',
+                      background: '#E11D48',
+                      boxShadow: '0 0 6px rgba(225,29,72,0.3)',
+                    }}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Metadata area — only render if there's content */}
+          {(tags.length > 0 || hasDescription) && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.15, delay: 0.08 }}
+              style={{ padding: '8px 10px 10px' }}
             >
-              {asset.description}
-            </div>
+              {/* Tags */}
+              {tags.length > 0 && (
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: hasDescription ? 6 : 0 }}>
+                  {tags.map((tag, i) => (
+                    <motion.span
+                      key={tag}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.12, delay: 0.1 + i * 0.03 }}
+                      style={{
+                        fontFamily: 'Fira Code, monospace',
+                        fontSize: 9,
+                        color: '#a1a1aa',
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.06)',
+                        borderRadius: 3,
+                        padding: '1px 6px',
+                      }}
+                    >
+                      {tag}
+                    </motion.span>
+                  ))}
+                </div>
+              )}
+
+              {/* Description */}
+              {hasDescription && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.15, delay: 0.14 }}
+                  style={{
+                    fontSize: 11,
+                    fontStyle: 'italic',
+                    color: '#a1a1aa',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {asset.description}
+                </motion.div>
+              )}
+            </motion.div>
           )}
-        </div>
+        </motion.div>
       )}
-    </div>,
+    </AnimatePresence>,
     document.body
   );
 }
