@@ -24,13 +24,13 @@ const HEADERS: Array<{
   flex?: number;
   sortable: boolean;
 }> = [
-  { key: 'thumbnail',   label: '',         width: 40,  sortable: false },
+  { key: 'thumbnail',   label: '',         width: 72,  sortable: false },
   { key: 'title',       label: 'Title',    flex: 1,    sortable: true  },
-  { key: 'description', label: 'Desc',     width: 160, sortable: false },
-  { key: 'duration',    label: 'Duration', width: 50,  sortable: true  },
-  { key: 'imported',    label: 'Imported', width: 60,  sortable: true  },
-  { key: 'tags',        label: 'Tags',     width: 80,  sortable: false },
-  { key: 'transcript',  label: '',         width: 16,  sortable: false },
+  { key: 'description', label: 'Desc',     width: 220, sortable: false },
+  { key: 'duration',    label: 'Duration', width: 64,  sortable: true  },
+  { key: 'imported',    label: 'Imported', width: 80,  sortable: true  },
+  { key: 'tags',        label: 'Tags',     width: 120, sortable: false },
+  { key: 'transcript',  label: '',         width: 24,  sortable: false },
 ];
 
 function cycleSortDir(
@@ -87,8 +87,8 @@ export function AssetTableView({
     display: 'flex',
     alignItems: 'center',
     borderBottom: '1px solid rgba(255,255,255,0.05)',
-    paddingBottom: 4,
-    marginBottom: 4,
+    paddingBottom: 6,
+    marginBottom: 6,
   };
 
   return (
@@ -115,9 +115,9 @@ export function AssetTableView({
                 flex,
                 flexShrink: width ? 0 : undefined,
                 minWidth: 0,
-                paddingRight: 8,
-                paddingLeft: key === 'thumbnail' ? 6 : undefined,
-                fontSize: 7,
+                paddingRight: 12,
+                paddingLeft: key === 'thumbnail' ? 8 : undefined,
+                fontSize: 9,
                 textTransform: 'uppercase' as const,
                 letterSpacing: '0.5px',
                 color: isActive ? '#71717a' : '#52525b',

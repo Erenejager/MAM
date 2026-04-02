@@ -44,6 +44,7 @@ export function AssetTableRow({
   onContextMenu,
 }: AssetTableRowProps) {
   const [hovering, setHovering] = useState(false);
+  const [thumbHovering, setThumbHovering] = useState(false);
   const [anchorRect, setAnchorRect] = useState<{ top: number; left: number; bottom: number } | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const thumbRef = useRef<HTMLDivElement>(null);
@@ -81,8 +82,8 @@ export function AssetTableRow({
       : hovering
         ? '1px solid rgba(255,255,255,0.07)'
         : '1px solid transparent',
-    borderRadius: 4,
-    height: 34,
+    borderRadius: 6,
+    height: 56,
     display: 'flex',
     alignItems: 'center',
     cursor: 'pointer',
@@ -103,100 +104,102 @@ export function AssetTableRow({
         role="row"
         tabIndex={0}
         style={rowStyle}
-        onMouseEnter={() => {
-          const thumbRect = thumbRef.current?.getBoundingClientRect();
-          const rowRect = rowRef.current?.getBoundingClientRect();
-          if (thumbRect && rowRect) {
-            setAnchorRect({ top: rowRect.top, left: thumbRect.left, bottom: rowRect.bottom });
-          }
-          setHovering(true);
-        }}
-        onMouseLeave={() => setHovering(false)}
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => { setHovering(false); setThumbHovering(false); }}
         onClick={() => onSelect(asset.id)}
         onContextMenu={(e) => onContextMenu(e, asset.id)}
         onKeyDown={handleKeyDown}
         aria-selected={isSelected}
       >
-        {/* Thumbnail — 40px */}
+        {/* Thumbnail — 72px */}
         <div
           ref={thumbRef}
           role="cell"
-          style={{ width: 40, flexShrink: 0, padding: '0 6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          style={{ width: 72, flexShrink: 0, padding: '0 8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onMouseEnter={() => {
+            const thumbRect = thumbRef.current?.getBoundingClientRect();
+            const rowRect = rowRef.current?.getBoundingClientRect();
+            if (thumbRect && rowRect) {
+              setAnchorRect({ top: rowRect.top, left: thumbRect.left, bottom: rowRect.bottom });
+            }
+            setThumbHovering(true);
+          }}
+          onMouseLeave={() => setThumbHovering(false)}
         >
           {isIngesting ? (
             <div style={{
-              width: 40, height: 24, borderRadius: 3,
+              width: 64, height: 38, borderRadius: 4,
               background: 'rgba(255,255,255,0.04)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 8, color: '#52525b', letterSpacing: 2,
+              fontSize: 9, color: '#52525b', letterSpacing: 2,
             }}>···</div>
           ) : (
             <img
               src={`/storage/${asset.id}/thumbnail.jpg`}
               alt=""
-              style={{ width: 40, height: 24, borderRadius: 3, objectFit: 'cover', display: 'block' }}
+              style={{ width: 64, height: 38, borderRadius: 4, objectFit: 'cover', display: 'block' }}
             />
           )}
         </div>
 
         {/* Title — flex:1 */}
-        <div role="cell" style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+        <div role="cell" style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
           <div style={{
-            fontSize: 10, fontWeight: 600, color: titleColor,
+            fontSize: 13, fontWeight: 600, color: titleColor,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
             {isIngesting ? '—' : (asset.title || asset.originalFilename)}
           </div>
         </div>
 
-        {/* Description — 160px */}
-        <div role="cell" style={{ width: 160, flexShrink: 0, paddingRight: 8 }}>
+        {/* Description — 220px */}
+        <div role="cell" style={{ width: 220, flexShrink: 0, paddingRight: 12 }}>
           <div style={{
-            fontSize: 9, fontStyle: 'italic', color: '#52525b',
+            fontSize: 12, fontStyle: 'italic', color: '#52525b',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
             {isIngesting ? '—' : (asset.description || '—')}
           </div>
         </div>
 
-        {/* Duration — 50px */}
-        <div role="cell" style={{ width: 50, flexShrink: 0, paddingRight: 8 }}>
+        {/* Duration — 64px */}
+        <div role="cell" style={{ width: 64, flexShrink: 0, paddingRight: 12 }}>
           <div style={{
-            fontSize: 9, fontFamily: 'Fira Code, monospace', color: metaColor,
+            fontSize: 12, fontFamily: 'Fira Code, monospace', color: metaColor,
           }}>
             {isIngesting ? '—' : formatDuration(asset.durationSeconds)}
           </div>
         </div>
 
-        {/* Imported — 60px */}
-        <div role="cell" style={{ width: 60, flexShrink: 0, paddingRight: 8 }}>
-          <div style={{ fontSize: 9, color: metaColor }}>
+        {/* Imported — 80px */}
+        <div role="cell" style={{ width: 80, flexShrink: 0, paddingRight: 12 }}>
+          <div style={{ fontSize: 12, color: metaColor }}>
             {isIngesting ? '—' : formatRelativeDate(asset.createdAt)}
           </div>
         </div>
 
-        {/* Tags — 80px */}
-        <div role="cell" style={{ width: 80, flexShrink: 0, paddingRight: 8, display: 'flex', alignItems: 'center', gap: 3, overflow: 'hidden' }}>
+        {/* Tags — 120px */}
+        <div role="cell" style={{ width: 120, flexShrink: 0, paddingRight: 12, display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
           {!isIngesting && visibleTags.map((tag) => (
             <span key={tag} style={{
-              fontSize: 7, color: '#71717a',
+              fontSize: 10, color: '#71717a',
               background: 'rgba(255,255,255,0.04)',
               border: '1px solid rgba(255,255,255,0.06)',
-              borderRadius: 3, padding: '1px 4px',
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 36,
+              borderRadius: 3, padding: '2px 6px',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 52,
             }}>
               {tag}
             </span>
           ))}
           {!isIngesting && overflowCount > 0 && (
-            <span style={{ fontSize: 7, color: '#52525b' }}>+{overflowCount}</span>
+            <span style={{ fontSize: 10, color: '#52525b' }}>+{overflowCount}</span>
           )}
         </div>
 
-        {/* Transcript dot — 16px */}
-        <div role="cell" style={{ width: 16, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {/* Transcript dot — 24px */}
+        <div role="cell" style={{ width: 24, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{
-            width: 6, height: 6, borderRadius: '50%', background: dotColor,
+            width: 8, height: 8, borderRadius: '50%', background: dotColor,
             animation: dotPulse ? 'pulse 1.5s ease-in-out infinite' : 'none',
           }} />
         </div>
@@ -204,10 +207,10 @@ export function AssetTableRow({
 
       <PreviewCard
         asset={asset}
-        visible={hovering}
+        visible={thumbHovering}
         anchorRect={anchorRect}
-        onMouseEnter={() => setHovering(true)}
-        onMouseLeave={() => setHovering(false)}
+        onMouseEnter={() => setThumbHovering(true)}
+        onMouseLeave={() => setThumbHovering(false)}
       />
     </>
   );
