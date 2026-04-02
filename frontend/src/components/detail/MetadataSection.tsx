@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ChevronRight } from 'lucide-react';
 import type { Asset } from '../../types/asset';
 import { formatDuration, formatFileSize, formatDate } from '../../lib/formatters';
 import { InlineEditText } from './InlineEditText';
@@ -33,11 +34,12 @@ function CollapsibleSection({
         className="w-full flex items-center gap-[6px] px-md py-[6px] cursor-pointer bg-[rgba(255,255,255,0.03)] hover:bg-glass-hover transition-colors"
         aria-expanded={open}
       >
-        {open ? (
-          <ChevronDown size={12} className="text-text-muted shrink-0" />
-        ) : (
+        <motion.div
+          animate={{ rotate: open ? 90 : 0 }}
+          transition={{ duration: 0.15 }}
+        >
           <ChevronRight size={12} className="text-text-muted shrink-0" />
-        )}
+        </motion.div>
         <span className="text-[9px] uppercase tracking-[1px] text-[#e4e4e7] font-semibold">
           {title}
         </span>
@@ -47,15 +49,19 @@ function CollapsibleSection({
           </span>
         )}
       </button>
-      <div
-        className="overflow-hidden transition-all duration-200 ease-out"
-        style={{
-          maxHeight: open ? 1000 : 0,
-          opacity: open ? 1 : 0,
-        }}
-      >
-        {children}
-      </div>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="overflow-hidden"
+          >
+            {children}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

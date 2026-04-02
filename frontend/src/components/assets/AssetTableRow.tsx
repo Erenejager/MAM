@@ -89,6 +89,7 @@ export function AssetTableRow({
     position: 'relative',
     marginBottom: 1,
     outline: 'none',
+    transition: 'background 150ms ease-out, border-color 150ms ease-out',
   };
 
   const titleColor = (isSelected || hovering) ? '#e4e4e7' : '#a1a1aa';

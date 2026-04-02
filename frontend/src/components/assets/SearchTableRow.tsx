@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import type { Asset, SearchResult } from '../../types/asset';
 
 interface SearchTableRowProps {
@@ -77,6 +78,7 @@ export function SearchTableRow({
     marginBottom: 4,
     cursor: 'pointer',
     outline: 'none',
+    transition: 'background 150ms ease-out, border-color 150ms ease-out',
   };
 
   const titleColor = (isSelected || hovering) ? '#e4e4e7' : '#a1a1aa';
@@ -135,31 +137,46 @@ export function SearchTableRow({
         flexWrap: 'wrap',
       }}>
         {hasTitle && (
-          <span style={{
-            fontSize: 6, padding: '0 3px', lineHeight: '14px',
-            background: 'rgba(225,29,72,0.12)', border: '1px solid rgba(225,29,72,0.18)',
-            borderRadius: 2, color: '#E11D48',
-          }}>
+          <motion.span
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.12, delay: 0 }}
+            style={{
+              fontSize: 6, padding: '0 3px', lineHeight: '14px',
+              background: 'rgba(225,29,72,0.12)', border: '1px solid rgba(225,29,72,0.18)',
+              borderRadius: 2, color: '#E11D48',
+            }}
+          >
             Title
-          </span>
+          </motion.span>
         )}
         {hasDescription && (
-          <span style={{
-            fontSize: 6, padding: '0 3px', lineHeight: '14px',
-            background: 'rgba(225,29,72,0.12)', border: '1px solid rgba(225,29,72,0.18)',
-            borderRadius: 2, color: '#E11D48',
-          }}>
+          <motion.span
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.12, delay: 0.04 }}
+            style={{
+              fontSize: 6, padding: '0 3px', lineHeight: '14px',
+              background: 'rgba(225,29,72,0.12)', border: '1px solid rgba(225,29,72,0.18)',
+              borderRadius: 2, color: '#E11D48',
+            }}
+          >
             Description
-          </span>
+          </motion.span>
         )}
         {hasTranscript && (
-          <span style={{
-            fontSize: 6, padding: '0 3px', lineHeight: '14px',
-            background: 'rgba(225,29,72,0.12)', border: '1px solid rgba(225,29,72,0.18)',
-            borderRadius: 2, color: '#E11D48',
-          }}>
+          <motion.span
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.12, delay: 0.08 }}
+            style={{
+              fontSize: 6, padding: '0 3px', lineHeight: '14px',
+              background: 'rgba(225,29,72,0.12)', border: '1px solid rgba(225,29,72,0.18)',
+              borderRadius: 2, color: '#E11D48',
+            }}
+          >
             Transcript ×{searchResult.transcriptMatch!.matchCount}
-          </span>
+          </motion.span>
         )}
         {!titleOnlyMatch && excerptRaw && (
           <span style={{

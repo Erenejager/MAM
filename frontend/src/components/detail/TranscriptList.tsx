@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 import type { Asset, TranscriptSegment } from '../../types/asset';
 import { formatTimecode } from '../../lib/formatters';
 import { cn } from '../../lib/cn';
@@ -183,28 +184,34 @@ export function TranscriptList({ asset, videoRef, segments, loading }: Transcrip
             ref={el => { if (el) segmentRefs.current.set(i, el); else segmentRefs.current.delete(i); }}
             onClick={() => handleSeek(seg.start, i)}
             className={cn(
-              'w-full text-left cursor-pointer transition-all duration-150',
+              'w-full text-left cursor-pointer relative',
               'px-[10px] py-[7px]',
-              i === activeIndex
-                ? 'rounded-lg'
-                : 'hover:bg-[rgba(255,255,255,0.03)]',
-              i < activeIndex && i !== activeIndex && 'opacity-50'
+              i !== activeIndex && 'hover:bg-[rgba(255,255,255,0.03)]',
+              i < activeIndex && i !== activeIndex && 'opacity-50',
+              'transition-opacity duration-150'
             )}
-            style={i === activeIndex ? {
-              background: 'rgba(225,29,72,0.06)',
-              border: '1px solid rgba(225,29,72,0.15)',
-              boxShadow: '0 0 12px rgba(225,29,72,0.08)',
-            } : undefined}
           >
-            <div className="flex items-baseline gap-sm">
+            {i === activeIndex && (
+              <motion.div
+                layoutId="transcript-active"
+                className="absolute inset-0 rounded-lg"
+                style={{
+                  background: 'rgba(225,29,72,0.06)',
+                  border: '1px solid rgba(225,29,72,0.15)',
+                  boxShadow: '0 0 12px rgba(225,29,72,0.08)',
+                }}
+                transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+              />
+            )}
+            <div className="flex items-baseline gap-sm relative z-[1]">
               <span className={cn(
-                'font-mono text-[10px] shrink-0 tabular-nums leading-none',
+                'font-mono text-[10px] shrink-0 tabular-nums leading-none transition-colors duration-150',
                 i === activeIndex ? 'text-cta' : 'text-[#71717a]'
               )}>
                 {formatTimecode(seg.start)}
               </span>
               <span className={cn(
-                'text-xs leading-relaxed',
+                'text-xs leading-relaxed transition-colors duration-150',
                 i === activeIndex ? 'text-[#e4e4e7]' : i < activeIndex ? 'text-[#71717a]' : 'text-[#94A3B8]'
               )}>
                 {highlightText(seg.text, query, i, matches, currentMatchIdx)}

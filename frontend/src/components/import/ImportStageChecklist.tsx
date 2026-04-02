@@ -1,4 +1,5 @@
 // frontend/src/components/import/ImportStageChecklist.tsx
+import { AnimatePresence, motion } from 'framer-motion';
 import { Check, X } from 'lucide-react';
 
 type StageStatus = 'pending' | 'processing' | 'complete' | 'failed' | 'skipped';
@@ -52,17 +53,34 @@ function StageRowView({ stage }: { stage: StageRow }) {
 
   return (
     <div className={containerClass} style={containerStyle} role="listitem">
-      {/* Icon */}
-      {isComplete && <Check size={14} className="text-[#10B981] shrink-0" />}
-      {isActive && (
-        <div
-          className="w-[14px] h-[14px] rounded-full border-2 border-cta border-t-transparent shrink-0"
-          style={{ animation: 'spin 1s linear infinite' }}
-          aria-label="Processing"
-        />
-      )}
-      {isFailed && <X size={14} className="text-cta shrink-0" />}
-      {isPending && <span className="text-[#52525b] text-[14px] shrink-0">&#9675;</span>}
+      {/* Icon with animated transitions */}
+      <div className="w-[14px] h-[14px] shrink-0 relative flex items-center justify-center">
+        <AnimatePresence mode="wait">
+          {isComplete && (
+            <motion.div key="check" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 25 }}>
+              <Check size={14} className="text-[#10B981]" />
+            </motion.div>
+          )}
+          {isActive && (
+            <motion.div
+              key="spin"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="w-[14px] h-[14px] rounded-full border-2 border-cta border-t-transparent"
+              style={{ animation: 'spin 1s linear infinite' }}
+              aria-label="Processing"
+            />
+          )}
+          {isFailed && (
+            <motion.div key="fail" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 25 }}>
+              <X size={14} className="text-cta" />
+            </motion.div>
+          )}
+          {isPending && (
+            <motion.span key="pending" className="text-[#52525b] text-[14px]">&#9675;</motion.span>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Label */}
       <span
@@ -92,8 +110,15 @@ function StageRowView({ stage }: { stage: StageRow }) {
 export function ImportStageChecklist({ stages }: ImportStageChecklistProps) {
   return (
     <div className="flex flex-col gap-[8px]" role="list" aria-label="Import stages">
-      {stages.map((stage) => (
-        <StageRowView key={stage.name} stage={stage} />
+      {stages.map((stage, i) => (
+        <motion.div
+          key={stage.name}
+          initial={{ opacity: 0, x: -8 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.15, delay: i * 0.05 }}
+        >
+          <StageRowView stage={stage} />
+        </motion.div>
       ))}
     </div>
   );

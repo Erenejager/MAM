@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Plus, X } from 'lucide-react';
 import { useTags } from '../../hooks/useAssets';
 import { cn } from '../../lib/cn';
@@ -110,21 +111,28 @@ export function TagEditor({ tags, onTagsChange }: TagEditorProps) {
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {localTags.map((tag) => (
-        <span
-          key={tag}
-          className="inline-flex items-center gap-[3px] bg-glass glass-blur-sm border border-glass-border text-text-muted px-[6px] py-[1px] rounded-lg text-[11px] font-sans cursor-default hover:border-cta/30 transition-colors duration-150"
-        >
-          {tag}
-          <button
-            onClick={() => handleRemoveTag(tag)}
-            aria-label={`Remove tag ${tag}`}
-            className="w-3.5 h-3.5 text-text-muted hover:text-cta cursor-pointer transition-colors duration-150 flex items-center justify-center"
+      <AnimatePresence mode="popLayout">
+        {localTags.map((tag) => (
+          <motion.span
+            key={tag}
+            layout
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            transition={{ duration: 0.15, type: 'spring', stiffness: 500, damping: 30 }}
+            className="inline-flex items-center gap-[3px] bg-glass glass-blur-sm border border-glass-border text-text-muted px-[6px] py-[1px] rounded-lg text-[11px] font-sans cursor-default hover:border-cta/30 transition-colors duration-150"
           >
-            <X className="w-3 h-3" />
-          </button>
-        </span>
-      ))}
+            {tag}
+            <button
+              onClick={() => handleRemoveTag(tag)}
+              aria-label={`Remove tag ${tag}`}
+              className="w-3.5 h-3.5 text-text-muted hover:text-cta cursor-pointer transition-colors duration-150 flex items-center justify-center"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </motion.span>
+        ))}
+      </AnimatePresence>
       <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => setIsOpen(true)}
@@ -133,10 +141,16 @@ export function TagEditor({ tags, onTagsChange }: TagEditorProps) {
         >
           <Plus className="w-3.5 h-3.5" />
         </button>
-        {isOpen && (
-          <div
+        <AnimatePresence>
+          {isOpen && (
+          <motion.div
             role="listbox"
+            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -4 }}
+            transition={{ duration: 0.12 }}
             className="absolute z-50 mt-1 w-56 bg-[rgba(20,20,35,0.9)] glass-blur-xl border border-glass-border rounded-lg shadow-lg overflow-hidden"
+            style={{ transformOrigin: 'top left' }}
           >
             <input
               ref={inputRef}
@@ -186,8 +200,9 @@ export function TagEditor({ tags, onTagsChange }: TagEditorProps) {
                 </button>
               )}
             </div>
-          </div>
+          </motion.div>
         )}
+        </AnimatePresence>
       </div>
     </div>
   );
