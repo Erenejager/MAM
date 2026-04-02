@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { ThumbnailPopup } from './ThumbnailPopup';
+import { PreviewCard } from './PreviewCard';
 import type { Asset } from '../../types/asset';
 
 interface AssetTableRowProps {
@@ -44,7 +44,7 @@ export function AssetTableRow({
   onContextMenu,
 }: AssetTableRowProps) {
   const [hovering, setHovering] = useState(false);
-  const [popupCoords, setPopupCoords] = useState({ left: 8, top: 0 });
+  const [anchorRect, setAnchorRect] = useState<{ top: number; left: number; bottom: number } | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const thumbRef = useRef<HTMLDivElement>(null);
 
@@ -103,10 +103,11 @@ export function AssetTableRow({
         tabIndex={0}
         style={rowStyle}
         onMouseEnter={() => {
-          setPopupCoords({
-            left: thumbRef.current?.offsetLeft ?? 8,
-            top: rowRef.current?.offsetTop ?? 0,
-          });
+          const thumbRect = thumbRef.current?.getBoundingClientRect();
+          const rowRect = rowRef.current?.getBoundingClientRect();
+          if (thumbRect && rowRect) {
+            setAnchorRect({ top: rowRect.top, left: thumbRect.left, bottom: rowRect.bottom });
+          }
           setHovering(true);
         }}
         onMouseLeave={() => setHovering(false)}
@@ -200,12 +201,10 @@ export function AssetTableRow({
         </div>
       </div>
 
-      <ThumbnailPopup
-        assetId={asset.id}
-        durationSeconds={asset.durationSeconds}
+      <PreviewCard
+        asset={asset}
         visible={hovering}
-        thumbOffsetLeft={popupCoords.left}
-        rowOffsetTop={popupCoords.top}
+        anchorRect={anchorRect}
       />
     </>
   );
