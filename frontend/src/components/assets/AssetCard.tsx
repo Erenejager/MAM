@@ -1,7 +1,7 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef } from 'react';
 import { Film } from 'lucide-react';
 import { cn } from '../../lib/cn';
-import { formatDuration, formatTimecode } from '../../lib/formatters';
+import { formatDuration } from '../../lib/formatters';
 import { StatusBadge } from './StatusBadge';
 import { ScrubPreview } from './ScrubPreview';
 import { SearchContextOverlay } from './SearchContextOverlay';
@@ -46,7 +46,6 @@ export function AssetCard({
 
   const [spotlightPos, setSpotlightPos] = useState({ x: 50, y: 50 });
   const articleRef = useRef<HTMLElement>(null);
-  const [searchFrameSrc, setSearchFrameSrc] = useState<string | null>(null);
   const isSearchMode = !!searchResult;
 
   function handleMouseMove(e: React.MouseEvent<HTMLElement>) {
@@ -56,17 +55,6 @@ export function AssetCard({
     setSpotlightPos({ x, y });
   }
 
-  const handleMouseEnter = useCallback(() => {
-    if (isSearchMode && searchResult?.transcriptMatch?.timestamp != null) {
-      const t = Math.round(searchResult.transcriptMatch.timestamp);
-      setSearchFrameSrc(`/api/assets/${asset.id}/frame?t=${t}`);
-    }
-  }, [isSearchMode, searchResult, asset.id]);
-
-  const handleMouseLeave = useCallback(() => {
-    setSearchFrameSrc(null);
-  }, []);
-
   return (
     <article
       ref={articleRef}
@@ -75,8 +63,6 @@ export function AssetCard({
       onClick={() => onSelect(asset.id)}
       onContextMenu={(e) => onContextMenu(e, asset.id)}
       onMouseMove={handleMouseMove}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -114,25 +100,6 @@ export function AssetCard({
         </div>
       )}
 
-      {/* Search mode: frame at match timestamp */}
-      {searchFrameSrc && (
-        <img
-          src={searchFrameSrc}
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover z-[1] opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-        />
-      )}
-
-      {/* Search mode: timestamp badge */}
-      {searchFrameSrc && searchResult?.transcriptMatch?.timestamp != null && (
-        <div
-          className="absolute top-xs left-xs z-[4] opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded px-[6px] py-[1px] font-mono text-[9px] text-white font-semibold"
-          style={{ background: 'rgba(225,29,72,0.9)' }}
-        >
-          @ {formatTimecode(searchResult.transcriptMatch.timestamp)}
-        </div>
-      )}
-
       {/* Default bottom gradient — fades out on hover as metadata overlay takes over */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent group-hover:opacity-0 transition-opacity duration-200" />
 
@@ -151,23 +118,34 @@ export function AssetCard({
         </div>
       )}
 
-      {/* Bottom: title — slides up into metadata overlay on hover */}
-      <div className="absolute left-0 right-0 px-[10px] z-[6] transition-all duration-200 bottom-[4px] group-hover:bottom-[calc(40%-22px)]">
-        <h3 className="text-xs font-semibold text-white truncate leading-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-          {displayTitle}
-        </h3>
-      </div>
-
-      {/* Browse mode: scrub preview */}
+      {/* Bottom: title — slides up above metadata overlay on hover (browse mode only) */}
       {!isSearchMode && (
-        <ScrubPreview asset={asset} containerRef={articleRef} />
+        <div className="absolute left-0 right-0 px-[10px] z-[6] transition-all duration-200 bottom-[4px] group-hover:bottom-[40%]">
+          <h3 className="text-xs font-semibold text-white truncate leading-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+            {displayTitle}
+          </h3>
+        </div>
       )}
+
+      {/* Search mode: static title at bottom (no slide — overlay handles layout) */}
+      {isSearchMode && (
+        <div className="absolute left-0 right-0 bottom-[4px] px-[10px] z-[6] group-hover:opacity-0 transition-opacity duration-200">
+          <h3 className="text-xs font-semibold text-white truncate leading-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+            {displayTitle}
+          </h3>
+        </div>
+      )}
+
+      {/* Scrub preview — available in both browse and search modes */}
+      <ScrubPreview asset={asset} containerRef={articleRef} />
 
       {/* Search mode: context overlay */}
       {isSearchMode && searchResult && (
         <SearchContextOverlay
           searchResult={searchResult}
           assetId={asset.id}
+          title={asset.title || asset.originalFilename}
+          onSelect={onSelect}
           onTimecodeClick={onTimecodeClick}
         />
       )}
