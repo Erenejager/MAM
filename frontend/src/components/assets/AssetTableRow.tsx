@@ -205,6 +205,8 @@ export function AssetTableRow({
         asset={asset}
         visible={hovering}
         anchorRect={anchorRect}
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => setHovering(false)}
       />
     </>
   );

@@ -6,6 +6,8 @@ interface PreviewCardProps {
   asset: Asset;
   visible: boolean;
   anchorRect: { top: number; left: number; bottom: number } | null;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
 function formatTime(s: number): string {
@@ -21,7 +23,7 @@ function parseTagsSafe(raw: string): string[] {
 const CARD_WIDTH = 320;
 const THUMB_HEIGHT = 180;
 
-export function PreviewCard({ asset, visible, anchorRect }: PreviewCardProps) {
+export function PreviewCard({ asset, visible, anchorRect, onMouseEnter, onMouseLeave }: PreviewCardProps) {
   const [show, setShow] = useState(false);
   const [frameIndex, setFrameIndex] = useState<number | null>(null);
   const [progressX, setProgressX] = useState(0);
@@ -89,6 +91,8 @@ export function PreviewCard({ asset, visible, anchorRect }: PreviewCardProps) {
     <div
       ref={cardRef}
       aria-hidden="true"
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       style={{
         position: 'fixed',
         left: anchorRect.left,
