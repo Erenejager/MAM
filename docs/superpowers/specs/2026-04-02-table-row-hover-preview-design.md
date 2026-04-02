@@ -16,21 +16,15 @@ Meanwhile, the grid view has rich hover interactions: scrub preview across 6 pre
 
 A floating card rendered via `createPortal` to `document.body` with `position: fixed`. Replaces the existing `ThumbnailPopup` component entirely for table view usage.
 
-**Dimensions:** 320px wide, variable height (~280px typical).
+**Dimensions:** 320px wide, variable height (~220-250px depending on content).
 
 **Card contents (top to bottom):**
 
 1. **Scrubbable thumbnail (320x180)** — uses the same 6-frame system as grid view (`/storage/{id}/frame_0..5.jpg`). Mouse movement across the thumbnail area scrubs through frames. Red progress bar at the bottom + timecode tooltip. Falls back to static thumbnail if `framesStatus !== 'complete'`.
 
-2. **Original filename** — monospace, muted (`#52525b`), truncated with ellipsis. Shown because the row title might be an edited/cleaned-up version.
+2. **All tags** — horizontal row of pill badges wrapping if needed. Monospace, `rgba(255,255,255,0.04)` background with subtle border. Only shown if the asset has tags.
 
 3. **Full description** — italic, `#a1a1aa`, multi-line (no truncation). Only shown if the asset has a description.
-
-4. **Technical specs** — horizontal row of pill badges: codec (e.g. H.264), resolution (e.g. 1080p), file size (e.g. 1.2 GB). Monospace, `rgba(255,255,255,0.04)` background with subtle border.
-
-5. **Transcript snippet** — separated by a subtle top border. Label "Transcript" in small uppercase. First 2 lines of transcript text, clamped with `-webkit-line-clamp: 2`. Only shown if `transcriptionStatus === 'complete'`.
-
-**Not included:** Tags (already visible in the row).
 
 ### Positioning
 
@@ -68,16 +62,8 @@ A floating card rendered via `createPortal` to `document.body` with `position: f
 
 All data is already available on the `Asset` type:
 - `framesStatus` — determines if scrub is available
-- `codec`, `width`, `height`, `fileSize` — technical specs
-- `description`, `originalFilename` — metadata
-- `transcriptionStatus` — whether to show transcript section
-
-Transcript text is NOT on the `Asset` type currently. Options:
-- Fetch from `/storage/{id}/transcript.json` on hover (adds latency)
-- Add a `transcriptSnippet` field to the asset query (first ~200 chars)
-- Skip transcript snippet for now, add later
-
-**Recommendation:** Skip transcript snippet in v1, add it when transcript data is more readily available on the asset object. The card is already rich without it.
+- `tags` — JSON array string, parsed with `JSON.parse()`
+- `description` — may be null/empty
 
 ### Files Modified
 
@@ -88,7 +74,7 @@ Transcript text is NOT on the `Asset` type currently. Options:
 ## Design System Compliance
 
 - Colors: `#1E1B4B` card background, `#2D2A5E` border, `#E11D48` progress bar — all from the palette
-- Typography: Fira Code for monospace elements, Fira Sans for body text
+- Typography: Fira Code for tag badges, Fira Sans for description
 - Shadows: `0 8px 32px rgba(0,0,0,0.6)` — within the defined shadow scale
 - Z-index: 50 (modal/overlay level per the z-index scale)
 - No scale transforms on hover (anti-pattern)
