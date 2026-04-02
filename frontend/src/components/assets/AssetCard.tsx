@@ -120,7 +120,7 @@ export function AssetCard({
 
       {/* Bottom: title — slides up above metadata overlay on hover (browse mode only) */}
       {!isSearchMode && (
-        <div className="absolute left-0 right-0 px-[10px] z-[6] transition-all duration-200 bottom-[4px] group-hover:bottom-[40%]">
+        <div className="absolute left-0 right-0 px-[10px] z-[6] transition-all duration-200 bottom-[6px] group-hover:bottom-[35%]">
           <h3 className="text-xs font-semibold text-white truncate leading-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
             {displayTitle}
           </h3>

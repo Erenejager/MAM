@@ -121,13 +121,13 @@ export function ScrubPreview({ asset, containerRef }: ScrubPreviewProps) {
         )}
       </div>
 
-      {/* Bottom 40%: metadata overlay — always visible on card hover */}
+      {/* Bottom 35%: metadata overlay — always visible on card hover */}
       <div
         className="absolute bottom-0 left-0 right-0 z-[3] opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end gap-[3px]"
         style={{
-          height: '40%',
+          height: '35%',
           background: 'linear-gradient(transparent 0%, rgba(10,10,20,0.75) 30%, rgba(10,10,20,0.95) 100%)',
-          padding: '12px 10px 10px',
+          padding: '10px 10px 8px',
         }}
       >
         <div className="font-mono text-[10px] text-[#71717a]">{metaLine}</div>
@@ -144,9 +144,6 @@ export function ScrubPreview({ asset, containerRef }: ScrubPreviewProps) {
             ))}
             {tags.length > 4 && <span className="text-[8px] text-[#52525b]">+{tags.length - 4}</span>}
           </div>
-        )}
-        {asset.description && (
-          <div className="text-[10px] text-[#71717a] italic truncate">{asset.description}</div>
         )}
       </div>
     </>
