@@ -1,5 +1,5 @@
 import { resolve, basename, dirname } from 'node:path';
-import { unlink, writeFile, rm } from 'node:fs/promises';
+import { unlink, writeFile, readFile, rm } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import ffmpeg from 'fluent-ffmpeg';
 import Groq from 'groq-sdk';
@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { assets } from '../db/schema.js';
 import { opensearchClient } from '../bootstrap/opensearch.js';
+import { runOcrPipeline } from './ocr/index.js';
 
 const INDEX_NAME = 'mam-assets';
 
@@ -291,6 +292,56 @@ export async function runPipeline(assetId: string): Promise<void> {
         transcriptionError: err instanceof Error ? err.message : String(err),
       });
       // Soft fail — continue to next stage
+    }
+  }
+
+  // ── Stage: OCR Key Moments ──────────────────────────────────────────────────
+  if (!process.env.GEMINI_API_KEY) {
+    updateAsset(assetId, { ocrStatus: 'skipped' });
+  } else {
+    updateAsset(assetId, { ocrStatus: 'processing' });
+    try {
+      // Load transcript segments if available
+      let segments: { start: number; end: number; text: string }[] = [];
+      const transcriptFile = resolve(assetDir, 'transcript.json');
+      try {
+        const raw = await readFile(transcriptFile, 'utf-8');
+        const data = JSON.parse(raw);
+        segments = data.segments ?? data;
+        if (!Array.isArray(segments)) segments = [];
+      } catch {
+        // No transcript available — OCR will rely on audio only
+      }
+
+      const duration = asset.durationSeconds ?? 0;
+      if (duration < 10) {
+        // Video too short for meaningful analysis
+        updateAsset(assetId, { ocrStatus: 'skipped' });
+      } else {
+        const result = await runOcrPipeline(
+          filePath,
+          duration,
+          segments,
+          assetDir,
+        );
+
+        if (result.keyMoments.length === 0) {
+          updateAsset(assetId, { ocrStatus: 'complete' });
+        } else {
+          updateAsset(assetId, {
+            ocrStatus: 'complete',
+            ocrSport: result.sport,
+            ocrCompetition: result.competition,
+            ocrPlayers: result.players.length > 0 ? JSON.stringify(result.players) : null,
+            ocrKeyMoments: JSON.stringify(result.keyMoments),
+          });
+        }
+      }
+    } catch (err) {
+      updateAsset(assetId, {
+        ocrStatus: 'failed',
+        ocrError: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
