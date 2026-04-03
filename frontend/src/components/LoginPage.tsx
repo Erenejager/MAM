@@ -186,13 +186,14 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             placeholder="Password"
             autoFocus
             disabled={submitting}
-            className="w-full px-4 py-3 rounded-lg font-sans text-sm
+            className="w-full rounded-lg font-sans text-sm
                        text-text placeholder:text-text-dim
                        focus:outline-none focus:ring-2 focus:ring-cta/50 focus:border-cta
                        disabled:opacity-50"
             style={{
               background: 'var(--glass-strong)',
               border: '1px solid var(--glass-border)',
+              padding: '14px 18px',
             }}
           />
 
