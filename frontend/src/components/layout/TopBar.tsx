@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { Search, X, Upload, Settings, Video, Library, LayoutGrid, List } from 'lucide-react';
+import { Search, X, Upload, Settings, Video, Library, LayoutGrid, List, LogOut, Tag, Loader2 } from 'lucide-react';
 import { FilterBar } from './FilterBar';
 import { MediaSphereLogo } from './MediaSphereLogo';
-import { useAssets } from '../../hooks/useAssets';
+import { useSuggest } from '../../hooks/useSuggest';
 
 interface TopBarProps {
   onSearch: (query: string) => void;
@@ -19,6 +19,7 @@ interface TopBarProps {
   completedSinceLastVisit?: number;
   viewMode: 'grid' | 'list';
   onViewModeChange: (mode: 'grid' | 'list') => void;
+  onLogout: () => void;
 }
 
 export function TopBar({
@@ -36,13 +37,12 @@ export function TopBar({
   completedSinceLastVisit,
   viewMode,
   onViewModeChange,
+  onLogout,
 }: TopBarProps) {
   const [expanded, setExpanded] = useState(false);
   const [inputValue, setInputValue] = useState(searchQuery);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { data: assets } = useAssets();
-
   // Sync external searchQuery into inputValue
   useEffect(() => { setInputValue(searchQuery); }, [searchQuery]);
 
@@ -100,16 +100,30 @@ export function TopBar({
     action();
   };
 
-  // Filter assets by input for suggestions
-  const suggestions = expanded && assets
-    ? assets.filter((a) => {
-        if (!inputValue.trim()) return true;
-        const q = inputValue.toLowerCase();
-        return (a.title || a.originalFilename).toLowerCase().includes(q);
-      }).slice(0, 6)
-    : [];
+  const { suggestions: apiSuggestions, isLoading: suggestLoading } = useSuggest(
+    expanded ? inputValue : '',
+  );
+  const [highlightIndex, setHighlightIndex] = useState(-1);
+
+  // Reset highlight when suggestions change
+  useEffect(() => { setHighlightIndex(-1); }, [apiSuggestions]);
 
   const showDropdown = expanded;
+
+  /** Bold the substring that matches the query */
+  const highlightMatch = (text: string) => {
+    const q = inputValue.trim().toLowerCase();
+    if (!q) return text;
+    const idx = text.toLowerCase().indexOf(q);
+    if (idx === -1) return text;
+    return (
+      <>
+        {text.slice(0, idx)}
+        <span className="text-text font-semibold">{text.slice(idx, idx + q.length)}</span>
+        {text.slice(idx + q.length)}
+      </>
+    );
+  };
 
   const pillBase = 'flex items-center gap-[4px] px-[12px] py-[4px] rounded-[6px] text-[10px] font-semibold transition-colors duration-150 cursor-pointer';
   const pillActive = 'bg-cta/10 text-cta';
@@ -156,7 +170,31 @@ export function TopBar({
                     type="text"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Escape') setExpanded(false); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setExpanded(false);
+                      } else if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setHighlightIndex((i) =>
+                          i < apiSuggestions.length - 1 ? i + 1 : 0,
+                        );
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setHighlightIndex((i) =>
+                          i > 0 ? i - 1 : apiSuggestions.length - 1,
+                        );
+                      } else if (e.key === 'Enter' && highlightIndex >= 0) {
+                        e.preventDefault();
+                        const picked = apiSuggestions[highlightIndex];
+                        if (picked.type === 'asset' && picked.id) {
+                          handleSelectAsset(picked.id);
+                        } else {
+                          setInputValue(picked.text);
+                          onSearch(picked.text);
+                          setExpanded(false);
+                        }
+                      }
+                    }}
                     placeholder="Search assets, tags, actions..."
                     className="flex-1 bg-transparent text-xs text-text outline-none placeholder:text-text-dim"
                   />
@@ -199,20 +237,43 @@ export function TopBar({
                     </button>
                   </div>
 
-                  {/* Asset suggestions */}
-                  {suggestions.length > 0 && (
+                  {/* Suggestions */}
+                  {inputValue.trim().length >= 2 && (
                     <div className="px-sm pb-sm border-t border-glass-border mt-xs pt-sm">
-                      <div className="text-[9px] font-semibold text-text-dim uppercase tracking-wider mb-xs">
-                        {inputValue.trim() ? 'Matching assets' : 'Recent assets'}
+                      <div className="text-[9px] font-semibold text-text-dim uppercase tracking-wider mb-xs flex items-center gap-xs">
+                        {suggestLoading ? (
+                          <>
+                            <Loader2 size={10} className="animate-spin" />
+                            Searching...
+                          </>
+                        ) : apiSuggestions.length > 0 ? (
+                          `${apiSuggestions.length} match${apiSuggestions.length === 1 ? '' : 'es'}`
+                        ) : (
+                          `No matches for "${inputValue.trim()}"`
+                        )}
                       </div>
-                      {suggestions.map((asset) => (
+                      {apiSuggestions.map((s, i) => (
                         <button
-                          key={asset.id}
-                          onClick={() => handleSelectAsset(asset.id)}
-                          className="w-full flex items-center gap-sm px-sm py-xs text-xs text-text-muted hover:bg-glass-hover hover:text-text rounded-md transition-colors"
+                          key={s.type + (s.id ?? s.text)}
+                          onClick={() => {
+                            if (s.type === 'asset' && s.id) {
+                              handleSelectAsset(s.id);
+                            } else {
+                              setInputValue(s.text);
+                              onSearch(s.text);
+                              setExpanded(false);
+                            }
+                          }}
+                          className={`w-full flex items-center gap-sm px-sm py-xs text-xs text-text-muted hover:bg-glass-hover hover:text-text rounded-md transition-colors ${
+                            i === highlightIndex ? 'bg-glass-hover text-text' : ''
+                          }`}
                         >
-                          <Video size={13} className="opacity-50" />
-                          <span className="truncate">{asset.title || asset.originalFilename}</span>
+                          {s.type === 'asset' ? (
+                            <Video size={13} className="opacity-50 shrink-0" />
+                          ) : (
+                            <Tag size={13} className="opacity-50 shrink-0" />
+                          )}
+                          <span className="truncate">{highlightMatch(s.text)}</span>
                         </button>
                       ))}
                     </div>
@@ -311,6 +372,16 @@ export function TopBar({
             Settings
           </button>
         </div>
+
+        {/* Disconnect */}
+        <button
+          onClick={onLogout}
+          className="shrink-0 flex items-center justify-center w-[28px] h-[28px] rounded-[6px] bg-glass border border-glass-border text-text-dim hover:text-cta hover:border-cta/30 hover:bg-cta/10 transition-colors cursor-pointer"
+          aria-label="Disconnect"
+          title="Disconnect"
+        >
+          <LogOut size={13} />
+        </button>
       </header>
       {selectedTags.length > 0 && (
         <FilterBar selectedTags={selectedTags} onToggleTag={onToggleTag} onClearTags={onClearTags} />
