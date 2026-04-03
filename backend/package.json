@@ -12,10 +12,10 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@fastify/cookie": "^11.0.2",
+    "@fastify/cookie": "^9.4.0",
     "@fastify/cors": "^9",
     "@fastify/multipart": "^8.3.1",
-    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/rate-limit": "^9.1.0",
     "@fastify/static": "^7",
     "@opensearch-project/opensearch": "^2",
     "bcryptjs": "^3.0.3",
