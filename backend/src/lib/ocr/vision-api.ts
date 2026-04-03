@@ -49,15 +49,29 @@ export async function analyzeFrames(
       const imageBuffer = await readFile(peak.framePath);
       const base64 = imageBuffer.toString('base64');
 
-      const response = await model.generateContent([
-        PROMPT,
-        {
-          inlineData: {
-            mimeType: 'image/jpeg',
-            data: base64,
-          },
-        },
-      ]);
+      // Retry with exponential backoff on rate limits (429)
+      let response;
+      for (let attempt = 1; attempt <= 4; attempt++) {
+        try {
+          response = await model.generateContent([
+            PROMPT,
+            {
+              inlineData: {
+                mimeType: 'image/jpeg',
+                data: base64,
+              },
+            },
+          ]);
+          break;
+        } catch (err: unknown) {
+          const is429 = err instanceof Error && err.message.includes('429');
+          if (!is429 || attempt === 4) throw err;
+          const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s
+          await new Promise((r) => setTimeout(r, delay));
+        }
+      }
+
+      if (!response) continue;
 
       const text = response.response.text();
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -83,6 +97,7 @@ export async function analyzeFrames(
         event: parsed.event ?? null,
       });
     } catch {
+      // Skip frame on non-retryable errors
       continue;
     }
   }
