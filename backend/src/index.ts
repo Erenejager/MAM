@@ -1,5 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import cookie from '@fastify/cookie';
+import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import { resolve } from 'node:path';
 import { config } from 'dotenv';
@@ -11,6 +13,8 @@ import { initOpenSearch } from './bootstrap/opensearch.js';
 import { assetRoutes } from './routes/assets.js';
 import { customFieldRoutes } from './routes/custom-fields.js';
 import { searchRoutes } from './routes/search.js';
+import { authRoutes } from './routes/auth.js';
+import { registerAuthMiddleware } from './middleware/auth.js';
 import './db/index.js'; // 3. Triggers DB connection
 
 const server = Fastify({ logger: true });
@@ -23,15 +27,42 @@ const start = async () => {
   // 2. Validate environment — exits if invalid
   validateEnv();
 
+  // Cookie parsing
+  await server.register(cookie);
+
   // 4. Initialize OpenSearch index
   await initOpenSearch();
 
-  // 5. CORS — development only (per CONTEXT.md decision)
+  // 5. CORS
   if (process.env.NODE_ENV === 'development') {
     await server.register(cors, {
-      origin: true, // Allow all origins in dev
+      origin: true,
+      credentials: true,
+    });
+  } else if (process.env.CORS_ORIGIN) {
+    await server.register(cors, {
+      origin: process.env.CORS_ORIGIN,
+      credentials: true,
     });
   }
+
+  // Rate limit login endpoint
+  await server.register(rateLimit, {
+    max: 5,
+    timeWindow: '10 minutes',
+    hook: 'onRequest',
+    keyGenerator: (request) => request.ip,
+    errorResponseBuilder: () => ({
+      statusCode: 429,
+      error: 'Too many attempts, try again later',
+    }),
+  });
+
+  // Auth routes (login/check/logout)
+  await server.register(authRoutes);
+
+  // Auth middleware — must be after auth routes are registered
+  registerAuthMiddleware(server);
 
   // 6. Register asset routes (upload + status)
   await server.register(assetRoutes);

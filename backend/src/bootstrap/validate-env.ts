@@ -11,6 +11,13 @@ export function validateEnv(): void {
     );
   }
 
+  // AUTH_PASSWORD — required, must be a bcrypt hash
+  if (!process.env.AUTH_PASSWORD) {
+    errors.push(
+      'AUTH_PASSWORD is not set. Generate a hash with: node -e "import(\'bcryptjs\').then(b=>b.hash(\'yourpassword\',10).then(console.log))" and add it to your .env file.'
+    );
+  }
+
   // STORAGE_ROOT — required, must be an existing directory
   const storageRoot = process.env.STORAGE_ROOT;
   if (!storageRoot) {
