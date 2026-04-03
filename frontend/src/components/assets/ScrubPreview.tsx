@@ -71,7 +71,7 @@ export function ScrubPreview({ asset, containerRef, title }: ScrubPreviewProps) 
     <>
       {/* Top 60%: scrub zone */}
       <div
-        className="absolute top-0 left-0 right-0 z-[2]"
+        className="absolute top-0 left-0 right-0 z-[6]"
         style={{ height: '60%' }}
         onMouseMove={handleScrubMove}
         onMouseLeave={handleScrubLeave}

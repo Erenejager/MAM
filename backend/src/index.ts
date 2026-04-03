@@ -46,12 +46,13 @@ const start = async () => {
     });
   }
 
-  // Rate limit login endpoint
+  // Rate limit login endpoint only
   await server.register(rateLimit, {
     max: 5,
     timeWindow: '10 minutes',
     hook: 'onRequest',
     keyGenerator: (request) => request.ip,
+    allowList: (request) => !request.url.startsWith('/api/auth/login'),
     errorResponseBuilder: () => ({
       statusCode: 429,
       error: 'Too many attempts, try again later',

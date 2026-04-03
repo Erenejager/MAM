@@ -102,10 +102,10 @@ export function AssetCard({
       )}
 
       {/* Default bottom gradient — fades out on hover as metadata overlay takes over */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent group-hover:opacity-0 transition-opacity duration-200" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent group-hover:opacity-0 transition-opacity duration-200 pointer-events-none" />
 
       {/* Top-left: status badge (compact) */}
-      <div className="absolute top-xs left-xs">
+      <div className="absolute top-xs left-xs pointer-events-none">
         <StatusBadge
           status={asset.status}
           transcriptionStatus={asset.transcriptionStatus}
@@ -114,7 +114,7 @@ export function AssetCard({
 
       {/* Duration badge - top right */}
       {asset.durationSeconds && (
-        <div className="absolute top-xs right-xs bg-black/70 glass-blur-sm border border-[rgba(255,255,255,0.08)] rounded px-xs py-0 text-[10px] font-mono text-text-muted leading-relaxed">
+        <div className="absolute top-xs right-xs bg-black/70 glass-blur-sm border border-[rgba(255,255,255,0.08)] rounded px-xs py-0 text-[10px] font-mono text-text-muted leading-relaxed pointer-events-none">
           {formatDuration(asset.durationSeconds)}
         </div>
       )}

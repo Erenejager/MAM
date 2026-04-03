@@ -3,7 +3,6 @@ import { createSession, removeSession, validateSession, verifyPassword } from '.
 
 const COOKIE_NAME = 'mam_session';
 const MAX_AGE_SECONDS = 7 * 24 * 60 * 60; // 7 days
-const isDev = process.env.NODE_ENV === 'development';
 
 export async function authRoutes(server: FastifyInstance) {
   server.post<{ Body: { password: string } }>('/api/auth/login', async (request, reply) => {
@@ -17,6 +16,7 @@ export async function authRoutes(server: FastifyInstance) {
       return reply.status(401).send({ error: 'Wrong password' });
     }
 
+    const isDev = process.env.NODE_ENV === 'development';
     const token = createSession();
     reply.setCookie(COOKIE_NAME, token, {
       httpOnly: true,
