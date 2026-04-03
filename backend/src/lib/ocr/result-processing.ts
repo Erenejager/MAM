@@ -96,39 +96,10 @@ function mostFrequent(values: string[]): string | null {
 }
 
 function validateChronology(sorted: VisionResult[]): VisionResult[] {
-  if (sorted.length <= 1) return sorted;
-
-  const result: VisionResult[] = [sorted[0]];
-
-  for (let i = 1; i < sorted.length; i++) {
-    const prev = result[result.length - 1];
-    const curr = sorted[i];
-
-    if (!curr.score || !prev.score) {
-      result.push(curr);
-      continue;
-    }
-
-    if (curr.set_period && prev.set_period && curr.set_period !== prev.set_period) {
-      result.push(curr);
-      continue;
-    }
-
-    const prevSum = digitSum(prev.score);
-    const currSum = digitSum(curr.score);
-
-    if (currSum >= prevSum) {
-      result.push(curr);
-    }
-  }
-
-  return result;
-}
-
-function digitSum(score: string): number {
-  const digits = score.match(/\d+/g);
-  if (!digits) return 0;
-  return digits.reduce((sum, d) => sum + parseInt(d, 10), 0);
+  // For MVP, keep all chronologically sorted moments.
+  // Score progression validation is too fragile across sports
+  // (tennis scores reset per game, football extra time, etc.)
+  return sorted;
 }
 
 function capitalizeFirst(s: string): string {
