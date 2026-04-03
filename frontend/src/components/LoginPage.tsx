@@ -34,9 +34,9 @@ function LoginLogo() {
   }, []);
 
   return (
-    <div className="flex flex-col items-center gap-6">
-      {/* Sphere — 80x80px scaled version */}
-      <div style={{ width: 80, height: 80, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+      {/* Sphere — 80x80px */}
+      <div style={{ width: 80, height: 80, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         {/* Spinning conic gradient ring */}
         <div
           style={{
@@ -127,30 +127,44 @@ function LoginLogo() {
         />
       </div>
 
-      {/* Text */}
-      <div style={{ lineHeight: 1 }}>
-        <span
+      {/* Text — stacked right */}
+      <div style={{ lineHeight: 1.15 }}>
+        <div>
+          <span
+            style={{
+              fontFamily: "'Fira Sans', sans-serif",
+              fontWeight: 600,
+              fontSize: 28,
+              letterSpacing: '2px',
+              color: '#E11D48',
+            }}
+          >
+            {displayText.media}
+          </span>
+          <span
+            style={{
+              fontFamily: "'Fira Sans', sans-serif",
+              fontWeight: 600,
+              fontSize: 28,
+              letterSpacing: '2px',
+              color: '#e4e4e7',
+            }}
+          >
+            {displayText.sphere}
+          </span>
+        </div>
+        <div
           style={{
-            fontFamily: "'Fira Sans', sans-serif",
-            fontWeight: 600,
-            fontSize: 28,
-            letterSpacing: '2px',
-            color: '#E11D48',
+            fontFamily: "'Fira Code', monospace",
+            fontSize: 8,
+            letterSpacing: '3px',
+            textTransform: 'uppercase' as const,
+            color: '#52525b',
+            marginTop: 6,
           }}
         >
-          {displayText.media}
-        </span>
-        <span
-          style={{
-            fontFamily: "'Fira Sans', sans-serif",
-            fontWeight: 600,
-            fontSize: 28,
-            letterSpacing: '2px',
-            color: '#e4e4e7',
-          }}
-        >
-          {displayText.sphere}
-        </span>
+          Asset Management
+        </div>
       </div>
     </div>
   );
@@ -175,7 +189,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
-      <form onSubmit={handleSubmit} className="flex flex-col items-center w-72" style={{ gap: 48 }}>
+      <form onSubmit={handleSubmit} className="flex flex-col items-center" style={{ gap: 48, width: 340 }}>
         <LoginLogo />
 
         <div className="w-full flex flex-col" style={{ gap: 16 }}>
@@ -208,7 +222,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             style={{
               background: '#E11D48',
               color: '#F8FAFC',
-              padding: '10px 20px',
+              padding: '12px 20px',
               borderRadius: 8,
               fontWeight: 600,
               fontSize: 14,
