@@ -6,13 +6,14 @@ import { useAsset } from '../../hooks/useAssets';
 import { VideoPlayer } from './VideoPlayer';
 import { MetadataSection } from './MetadataSection';
 import { TranscriptList } from './TranscriptList';
+import { KeyMomentsList } from './KeyMomentsList';
 import type { TranscriptSegment } from '../../types/asset';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../ui/resizable';
 
 interface DetailPanelProps {
   assetId: string;
   onClose: () => void;
-  initialTab?: 'info' | 'transcript';
+  initialTab?: 'info' | 'transcript' | 'moments';
   seekTimestamp?: number;
   onOpened?: () => void;
 }
@@ -25,7 +26,7 @@ export function DetailPanel({
   onOpened,
 }: DetailPanelProps) {
   const { data: asset } = useAsset(assetId);
-  const [activeTab, setActiveTab] = useState<'info' | 'transcript'>(
+  const [activeTab, setActiveTab] = useState<'info' | 'transcript' | 'moments'>(
     initialTab ?? 'info'
   );
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
@@ -80,7 +81,17 @@ export function DetailPanel({
     );
   }
 
-  const tabs = ['info', 'transcript'] as const;
+  const tabs = [
+    'info' as const,
+    'transcript' as const,
+    ...(asset?.ocrStatus === 'complete' && asset?.ocrKeyMoments ? ['moments' as const] : []),
+  ];
+
+  const tabLabels: Record<string, string> = {
+    info: 'Info',
+    transcript: 'Transcript',
+    moments: 'Key Moments',
+  };
 
   return (
     <div className="h-full flex flex-col bg-[rgba(12,12,20,0.92)] glass-blur-xl">
@@ -157,7 +168,7 @@ export function DetailPanel({
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`flex-1 py-xs text-xs font-medium capitalize transition-colors duration-200 relative z-10 ${
+                className={`flex-1 py-xs text-xs font-medium transition-colors duration-200 relative z-10 ${
                   activeTab === tab
                     ? 'text-cta'
                     : 'text-text-dim hover:text-text hover:bg-glass-hover'
@@ -165,7 +176,7 @@ export function DetailPanel({
                 role="tab"
                 aria-selected={activeTab === tab}
               >
-                {tab}
+                {tabLabels[tab]}
               </button>
             ))}
             {/* Animated underline indicator */}
@@ -207,6 +218,18 @@ export function DetailPanel({
                   segments={segments}
                   loading={segmentsLoading}
                 />
+              </motion.div>
+            )}
+            {activeTab === 'moments' && (
+              <motion.div
+                key="moments"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.12 }}
+                className="flex-1 flex flex-col min-h-0"
+              >
+                <KeyMomentsList asset={asset} videoRef={videoRef} />
               </motion.div>
             )}
           </AnimatePresence>
