@@ -13,6 +13,7 @@ import { initOpenSearch } from './bootstrap/opensearch.js';
 import { assetRoutes } from './routes/assets.js';
 import { customFieldRoutes } from './routes/custom-fields.js';
 import { searchRoutes } from './routes/search.js';
+import { suggestRoutes } from './routes/suggest.js';
 import { authRoutes } from './routes/auth.js';
 import { registerAuthMiddleware } from './middleware/auth.js';
 import './db/index.js'; // 3. Triggers DB connection
@@ -73,6 +74,9 @@ const start = async () => {
 
   // 6c. Register search routes (full-text search via OpenSearch)
   await server.register(searchRoutes);
+
+  // 6d. Register suggest routes (autocomplete via SQLite)
+  await server.register(suggestRoutes);
 
   // 6b. Serve uploaded files from STORAGE_ROOT
   await server.register(fastifyStatic, {
