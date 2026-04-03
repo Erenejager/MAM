@@ -13,7 +13,7 @@ export function registerAuthMiddleware(server: FastifyInstance) {
 
     const token = request.cookies.mam_session;
     if (!token || !validateSession(token)) {
-      reply.status(401).send({ error: 'Not authenticated' });
+      return reply.status(401).send({ error: 'Not authenticated' });
     }
   });
 }
