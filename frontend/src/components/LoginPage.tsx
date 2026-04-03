@@ -34,9 +34,9 @@ function LoginLogo() {
   }, []);
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-      {/* Sphere — 80x80px */}
-      <div style={{ width: 80, height: 80, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
+      {/* Sphere — 110x110px */}
+      <div style={{ width: 110, height: 110, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         {/* Spinning conic gradient ring */}
         <div
           style={{
@@ -49,15 +49,15 @@ function LoginLogo() {
             mask: 'radial-gradient(transparent 55%, black 58%, black 100%)',
           }}
         />
-        {/* Inner orb — 50x50px */}
+        {/* Inner orb — 68x68px */}
         <div style={{ position: 'relative', zIndex: 2 }}>
           <div
             style={{
-              width: 50,
-              height: 50,
+              width: 68,
+              height: 68,
               borderRadius: '50%',
               background: 'radial-gradient(circle at 35% 30%, rgba(255,140,160,0.5), rgba(225,29,72,0.4) 40%, rgba(225,29,72,0.1) 70%, transparent 85%)',
-              boxShadow: '0 0 40px rgba(225,29,72,0.35), 0 0 80px rgba(225,29,72,0.15)',
+              boxShadow: '0 0 50px rgba(225,29,72,0.35), 0 0 100px rgba(225,29,72,0.15)',
               animation: 'orbBreath 3s ease-in-out infinite',
               position: 'relative',
             }}
@@ -66,10 +66,10 @@ function LoginLogo() {
             <div
               style={{
                 position: 'absolute',
-                top: 8,
-                left: 13,
-                width: 18,
-                height: 10,
+                top: 11,
+                left: 18,
+                width: 24,
+                height: 14,
                 background: 'radial-gradient(ellipse, rgba(255,255,255,0.45), transparent)',
                 borderRadius: '50%',
                 transform: 'rotate(-15deg)',
@@ -90,11 +90,11 @@ function LoginLogo() {
         <div
           style={{
             position: 'absolute',
-            width: 5,
-            height: 5,
+            width: 6,
+            height: 6,
             borderRadius: '50%',
             background: 'rgba(225,29,72,0.8)',
-            boxShadow: '0 0 10px rgba(225,29,72,0.5)',
+            boxShadow: '0 0 12px rgba(225,29,72,0.5)',
             animation: 'orbitDot1 4s linear infinite',
           }}
         />
@@ -106,7 +106,7 @@ function LoginLogo() {
             height: 5,
             borderRadius: '50%',
             background: 'rgba(225,29,72,0.8)',
-            boxShadow: '0 0 10px rgba(225,29,72,0.5)',
+            boxShadow: '0 0 12px rgba(225,29,72,0.5)',
             animation: 'orbitDot2 5.5s linear infinite',
           }}
         />
@@ -117,7 +117,7 @@ function LoginLogo() {
             top: '50%',
             left: '-20%',
             right: '-20%',
-            height: '1px',
+            height: '1.5px',
             background: 'linear-gradient(90deg, transparent, rgba(225,29,72,0.3) 20%, rgba(255,255,255,0.15) 50%, rgba(225,29,72,0.3) 80%, transparent)',
             animation: 'streakSweep 4s ease-in-out infinite',
             pointerEvents: 'none',
@@ -134,8 +134,8 @@ function LoginLogo() {
             style={{
               fontFamily: "'Fira Sans', sans-serif",
               fontWeight: 600,
-              fontSize: 28,
-              letterSpacing: '2px',
+              fontSize: 36,
+              letterSpacing: '2.5px',
               color: '#E11D48',
             }}
           >
@@ -145,8 +145,8 @@ function LoginLogo() {
             style={{
               fontFamily: "'Fira Sans', sans-serif",
               fontWeight: 600,
-              fontSize: 28,
-              letterSpacing: '2px',
+              fontSize: 36,
+              letterSpacing: '2.5px',
               color: '#e4e4e7',
             }}
           >
@@ -156,8 +156,8 @@ function LoginLogo() {
         <div
           style={{
             fontFamily: "'Fira Code', monospace",
-            fontSize: 8,
-            letterSpacing: '3px',
+            fontSize: 10,
+            letterSpacing: '3.5px',
             textTransform: 'uppercase' as const,
             color: '#52525b',
             marginTop: 6,
@@ -189,7 +189,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
-      <form onSubmit={handleSubmit} className="flex flex-col items-center" style={{ gap: 48, width: 340 }}>
+      <form onSubmit={handleSubmit} className="flex flex-col items-center" style={{ gap: 48, width: 400 }}>
         <LoginLogo />
 
         <div className="w-full flex flex-col" style={{ gap: 16 }}>
