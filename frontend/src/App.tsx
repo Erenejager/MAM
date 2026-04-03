@@ -12,9 +12,29 @@ import { Toaster } from './components/ui/sonner';
 import { useSearch } from './hooks/useSearch';
 import { useTagFilter } from './hooks/useTagFilter';
 import { useAssets } from './hooks/useAssets';
+import { useAuth } from './hooks/useAuth';
+import { LoginPage } from './components/LoginPage';
 import type { SearchResult } from './types/asset';
 
 export default function App() {
+  const { isAuthenticated, isLoading, login } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-slate-400">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage onLogin={login} />;
+  }
+
+  return <AuthenticatedApp />;
+}
+
+function AuthenticatedApp() {
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [view, setView] = useState<'library' | 'settings' | 'import'>('library');
   const [searchQuery, setSearchQuery] = useState('');
@@ -98,7 +118,11 @@ export default function App() {
       try {
         const formData = new FormData();
         formData.append('file', file);
-        const res = await fetch('/api/assets', { method: 'POST', body: formData });
+        const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/assets`, {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
+        });
         if (res.status === 202) {
           setView('import');
         }

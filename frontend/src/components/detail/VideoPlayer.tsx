@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useState, useCallback } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { storageUrl } from '../../lib/api';
 import type { Asset } from '../../types/asset';
 import { VideoProgressBar } from './VideoProgressBar';
 
@@ -29,7 +30,7 @@ export const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
     const videoRefObj = { current: videoEl } as React.RefObject<HTMLVideoElement>;
 
     const posterUrl = asset.thumbnailPath
-      ? `/storage/${asset.id}/thumbnail.jpg`
+      ? storageUrl(`${asset.id}/thumbnail.jpg`)
       : undefined;
 
     // Sync play state and time
@@ -90,7 +91,7 @@ export const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
         <div className="relative flex-1 min-h-0 bg-black flex items-center justify-center">
           <video
             ref={videoRefCb}
-            src={`/storage/${asset.filepath}`}
+            src={storageUrl(asset.filepath)}
             poster={posterUrl}
             className="w-full h-full object-contain"
             onClick={togglePlay}

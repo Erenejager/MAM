@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { Film } from 'lucide-react';
+import { storageUrl } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { formatDuration } from '../../lib/formatters';
 import { StatusBadge } from './StatusBadge';
@@ -89,7 +90,7 @@ export function AssetCard({
       {/* Thumbnail or placeholder */}
       {asset.thumbnailPath ? (
         <img
-          src={`/storage/${asset.id}/thumbnail.jpg`}
+          src={storageUrl(`${asset.id}/thumbnail.jpg`)}
           alt=""
           loading="lazy"
           className="absolute inset-0 w-full h-full object-cover"
@@ -118,26 +119,19 @@ export function AssetCard({
         </div>
       )}
 
-      {/* Bottom: title — slides up above metadata overlay on hover (browse mode only) */}
-      {!isSearchMode && (
-        <div className="absolute left-0 right-0 px-[10px] z-[6] transition-all duration-200 bottom-[6px] group-hover:bottom-[35%]">
-          <h3 className="text-xs font-semibold text-white truncate leading-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-            {displayTitle}
-          </h3>
-        </div>
-      )}
+      {/* Static title at bottom — visible at rest, fades out as overlay takes over */}
+      <div className="absolute left-0 right-0 bottom-[6px] px-[10px] z-[4] group-hover:opacity-0 transition-opacity duration-200">
+        <h3 className="text-xs font-semibold text-white truncate leading-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+          {displayTitle}
+        </h3>
+      </div>
 
-      {/* Search mode: static title at bottom (no slide — overlay handles layout) */}
-      {isSearchMode && (
-        <div className="absolute left-0 right-0 bottom-[4px] px-[10px] z-[6] group-hover:opacity-0 transition-opacity duration-200">
-          <h3 className="text-xs font-semibold text-white truncate leading-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-            {displayTitle}
-          </h3>
-        </div>
-      )}
-
-      {/* Scrub preview — available in both browse and search modes */}
-      <ScrubPreview asset={asset} containerRef={articleRef} />
+      {/* Scrub preview — available in both browse and search modes, includes title in overlay */}
+      <ScrubPreview
+        asset={asset}
+        containerRef={articleRef}
+        title={!isSearchMode ? displayTitle : undefined}
+      />
 
       {/* Search mode: context overlay */}
       {isSearchMode && searchResult && (

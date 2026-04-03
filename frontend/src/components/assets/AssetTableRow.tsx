@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
+import { storageUrl } from '../../lib/api';
 import { PreviewCard } from './PreviewCard';
 import type { Asset } from '../../types/asset';
 
@@ -135,7 +136,7 @@ export function AssetTableRow({
             }}>···</div>
           ) : (
             <img
-              src={`/storage/${asset.id}/thumbnail.jpg`}
+              src={storageUrl(`${asset.id}/thumbnail.jpg`)}
               alt=""
               style={{ width: 64, height: 38, borderRadius: 4, objectFit: 'cover', display: 'block' }}
             />

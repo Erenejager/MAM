@@ -1,10 +1,12 @@
 import { useState, useCallback } from 'react';
+import { storageUrl } from '../../lib/api';
 import type { Asset } from '../../types/asset';
 import { formatDuration, formatFileSize, formatDate } from '../../lib/formatters';
 
 interface ScrubPreviewProps {
   asset: Asset;
   containerRef: React.RefObject<HTMLElement>;
+  title?: React.ReactNode;
 }
 
 function formatRelativeDate(isoDate: string | null): string {
@@ -17,7 +19,7 @@ function formatRelativeDate(isoDate: string | null): string {
   return `Imported ${formatDate(isoDate)}`;
 }
 
-export function ScrubPreview({ asset, containerRef }: ScrubPreviewProps) {
+export function ScrubPreview({ asset, containerRef, title }: ScrubPreviewProps) {
   const [frameIndex, setFrameIndex] = useState<number | null>(null);
   const [progressX, setProgressX] = useState(0);
   const [tooltipX, setTooltipX] = useState(0);
@@ -77,7 +79,7 @@ export function ScrubPreview({ asset, containerRef }: ScrubPreviewProps) {
         {/* Scrub frame image */}
         {frameIndex !== null && framesAvailable && (
           <img
-            src={`/storage/${asset.id}/frame_${frameIndex}.jpg`}
+            src={storageUrl(`${asset.id}/frame_${frameIndex}.jpg`)}
             alt=""
             className="absolute inset-0 w-full h-full object-cover"
             style={{ height: '167%' }}
@@ -121,15 +123,19 @@ export function ScrubPreview({ asset, containerRef }: ScrubPreviewProps) {
         )}
       </div>
 
-      {/* Bottom 35%: metadata overlay — always visible on card hover */}
+      {/* Bottom metadata overlay — always visible on card hover */}
       <div
-        className="absolute bottom-0 left-0 right-0 z-[3] opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end gap-[3px]"
+        className="absolute bottom-0 left-0 right-0 z-[3] opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end gap-[2px]"
         style={{
-          height: '35%',
-          background: 'linear-gradient(transparent 0%, rgba(10,10,20,0.75) 30%, rgba(10,10,20,0.95) 100%)',
-          padding: '10px 10px 8px',
+          background: 'linear-gradient(transparent 0%, rgba(10,10,20,0.7) 25%, rgba(10,10,20,0.95) 100%)',
+          padding: '16px 10px 8px',
         }}
       >
+        {title && (
+          <h3 className="text-xs font-semibold text-white truncate leading-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] mb-[2px]">
+            {title}
+          </h3>
+        )}
         <div className="font-mono text-[10px] text-[#71717a]">{metaLine}</div>
         <div className="text-[10px] text-[#52525b]">{formatRelativeDate(asset.createdAt)}</div>
         {tags.length > 0 && (

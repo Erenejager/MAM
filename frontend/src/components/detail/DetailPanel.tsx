@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft } from 'lucide-react';
+import { storageUrl } from '../../lib/api';
 import { useAsset } from '../../hooks/useAssets';
 import { VideoPlayer } from './VideoPlayer';
 import { MetadataSection } from './MetadataSection';
@@ -35,7 +36,7 @@ export function DetailPanel({
   useEffect(() => {
     if (!asset || (asset.transcriptionStatus !== 'ready' && asset.transcriptionStatus !== 'complete')) return;
     setSegmentsLoading(true);
-    fetch(`/storage/${asset.id}/transcript.json`)
+    fetch(storageUrl(`${asset.id}/transcript.json`), { credentials: 'include' })
       .then((r) => r.json())
       .then((data) => {
         const segs = data.segments ?? data;

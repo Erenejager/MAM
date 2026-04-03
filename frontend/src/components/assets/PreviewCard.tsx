@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
+import { storageUrl } from '../../lib/api';
 import type { Asset } from '../../types/asset';
 
 interface PreviewCardProps {
@@ -124,7 +125,7 @@ export function PreviewCard({ asset, visible, anchorRect, onMouseEnter, onMouseL
           >
             {/* Base thumbnail */}
             <img
-              src={`/storage/${asset.id}/thumbnail.jpg`}
+              src={storageUrl(`${asset.id}/thumbnail.jpg`)}
               alt=""
               style={{
                 width: '100%',
@@ -139,7 +140,7 @@ export function PreviewCard({ asset, visible, anchorRect, onMouseEnter, onMouseL
               {frameIndex !== null && framesAvailable && (
                 <motion.img
                   key={frameIndex}
-                  src={`/storage/${asset.id}/frame_${frameIndex}.jpg`}
+                  src={storageUrl(`${asset.id}/frame_${frameIndex}.jpg`)}
                   alt=""
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}

@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
+import { storageUrl } from '../../lib/api';
 import { PreviewCard } from './PreviewCard';
 import type { Asset, SearchResult } from '../../types/asset';
 
@@ -161,7 +162,7 @@ export function SearchTableRow({
             onMouseLeave={() => setThumbHovering(false)}
           >
             <img
-              src={`/storage/${asset.id}/thumbnail.jpg`}
+              src={storageUrl(`${asset.id}/thumbnail.jpg`)}
               alt=""
               style={{ width: '100%', borderRadius: 4, objectFit: 'cover', display: 'block' }}
             />

@@ -1,5 +1,6 @@
 // frontend/src/components/import/ImportCompletionToast.tsx
 import { toast } from 'sonner';
+import { storageUrl } from '../../lib/api';
 
 interface CompletionToastData {
   assetId: string;
@@ -41,7 +42,7 @@ function CompletionToastContent({ data, toastId }: { data: CompletionToastData; 
       >
         {data.thumbnailPath ? (
           <img
-            src={`/storage/${data.thumbnailPath}`}
+            src={storageUrl(data.thumbnailPath)}
             alt=""
             className="w-full h-full object-cover"
           />

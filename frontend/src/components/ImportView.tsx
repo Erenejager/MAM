@@ -59,7 +59,7 @@ function useAssetPolling(assetId: string | null, enabled: boolean) {
   return useQuery<AssetRecord>({
     queryKey: ['asset-import', assetId],
     queryFn: async () => {
-      const res = await fetch(`/api/assets/${assetId}`);
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/assets/${assetId}`, { credentials: 'include' });
       if (res.status === 404) throw new Error('Asset not found — pipeline may have failed');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json() as Promise<AssetRecord>;
@@ -180,7 +180,7 @@ export function ImportView({ onViewAsset, onImportComplete }: ImportViewProps) {
     formData.append('file', file);
 
     try {
-      const res = await fetch('/api/assets', { method: 'POST', body: formData });
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/assets`, { method: 'POST', body: formData, credentials: 'include' });
       const json = await res.json() as { id?: string; existingId?: string; error?: string };
 
       if (res.status === 202) {
