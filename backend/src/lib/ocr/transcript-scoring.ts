@@ -1,9 +1,28 @@
 const ACTION_KEYWORDS = new Set([
-  'goal', 'scores', 'point', 'wins', 'winner', 'save', 'miss',
-  'match', 'set', 'game', 'round', 'half', 'period', 'quarter',
-  'break', 'penalty', 'foul', 'card', 'knockout', 'finish',
-  'champion', 'victory', 'defeat', 'record', 'final', 'ace',
-  'try', 'conversion', 'birdie', 'eagle', 'hole', 'lap',
+  // Universal
+  'goal', 'scores', 'scored', 'point', 'wins', 'winner', 'won',
+  'save', 'saved', 'miss', 'missed', 'match', 'final', 'record',
+  'champion', 'championship', 'victory', 'defeat', 'defeated',
+  'finish', 'finished', 'title', 'trophy', 'medal',
+  // Periods
+  'set', 'game', 'round', 'half', 'period', 'quarter', 'overtime',
+  // Events
+  'break', 'penalty', 'foul', 'card', 'knockout', 'submission',
+  'try', 'conversion', 'converts', 'converted',
+  // Tennis
+  'ace', 'serve', 'forehand', 'backhand', 'volley', 'deuce',
+  'advantage', 'tiebreak', 'double', 'bagel',
+  // Football
+  'offside', 'corner', 'header', 'tackle', 'substitution',
+  // Golf
+  'birdie', 'eagle', 'bogey', 'hole', 'putt',
+  // Racing
+  'lap', 'overtake', 'pitstop', 'podium',
+  // Combat
+  'knockdown', 'takedown', 'clinch',
+  // General action
+  'incredible', 'amazing', 'brilliant', 'huge', 'unbelievable',
+  'survives', 'survived', 'celebrates', 'celebration',
 ]);
 
 export interface TranscriptSegment {
