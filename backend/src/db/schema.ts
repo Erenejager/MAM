@@ -36,6 +36,14 @@ export const assets = sqliteTable('assets', {
   // Search index
   searchIndexStatus: text('search_index_status').default('pending'),
 
+  // OCR / Key Moments
+  ocrStatus: text('ocr_status').default('pending'),
+  ocrError: text('ocr_error'),
+  ocrSport: text('ocr_sport'),
+  ocrCompetition: text('ocr_competition'),
+  ocrPlayers: text('ocr_players'),
+  ocrKeyMoments: text('ocr_key_moments'),
+
   // User-editable
   title: text('title'),
   description: text('description'),

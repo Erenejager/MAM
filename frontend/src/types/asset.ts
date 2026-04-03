@@ -20,6 +20,12 @@ export interface Asset {
   transcriptionStatus: 'pending' | 'processing' | 'ready' | 'complete' | 'failed';
   transcriptionError: string | null;
   searchIndexStatus: string;
+  ocrStatus: 'pending' | 'processing' | 'complete' | 'skipped' | 'failed';
+  ocrError: string | null;
+  ocrSport: string | null;
+  ocrCompetition: string | null;
+  ocrPlayers: string | null;
+  ocrKeyMoments: string | null;
   title: string | null;
   description: string | null;
   tags: string; // JSON string — parse with JSON.parse() to get string[]

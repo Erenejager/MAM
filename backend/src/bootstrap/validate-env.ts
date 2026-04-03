@@ -33,6 +33,14 @@ export function validateEnv(): void {
     }
   }
 
+  // GEMINI_API_KEY — optional, OCR stage skipped if missing
+  if (!process.env.GEMINI_API_KEY) {
+    console.warn(
+      '  ⚠ GEMINI_API_KEY is not set — OCR key moments extraction will be skipped.\n' +
+      '    Get your API key from https://aistudio.google.com/apikey',
+    );
+  }
+
   if (errors.length > 0) {
     console.error('\n=== STARTUP FAILED: Environment validation ===\n');
     errors.forEach((err, i) => console.error(`  ${i + 1}. ${err}`));

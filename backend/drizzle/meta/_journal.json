@@ -15,6 +15,13 @@
       "when": 1775074895826,
       "tag": "0001_lucky_bucky",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1775252712342,
+      "tag": "0002_silent_metal_master",
+      "breakpoints": true
     }
   ]
 }
