@@ -118,6 +118,25 @@ export async function searchAssets(q: string, tags?: string[]): Promise<SearchRe
   return res.json();
 }
 
+export interface Suggestion {
+  type: 'asset' | 'tag';
+  id: string | null;
+  text: string;
+}
+
+export async function fetchSuggestions(
+  q: string,
+  signal?: AbortSignal,
+): Promise<Suggestion[]> {
+  const res = await fetch(
+    `${API_BASE}/suggest?q=${encodeURIComponent(q)}`,
+    { credentials: 'include', signal },
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.suggestions ?? [];
+}
+
 // Auth functions
 
 export async function login(password: string): Promise<boolean> {
