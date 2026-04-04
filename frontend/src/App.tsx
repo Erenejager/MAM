@@ -5,19 +5,19 @@ import { TopBar } from './components/layout/TopBar';
 // CommandPalette removed — search now expands inline in TopBar
 import { AssetGrid } from './components/assets/AssetGrid';
 import { DetailPanel } from './components/detail/DetailPanel';
-import { ImportView } from './components/ImportView';
+import { ImportQueueView } from './components/import/ImportQueueView';
+import { useIngestingAssets } from './hooks/useIngestingAssets';
 import { SettingsPage } from './components/settings/SettingsPage';
 import { DropOverlay } from './components/upload/DropOverlay';
 import { Toaster } from './components/ui/sonner';
 import { useSearch } from './hooks/useSearch';
 import { useTagFilter } from './hooks/useTagFilter';
-import { useAssets } from './hooks/useAssets';
 import { useAuth } from './hooks/useAuth';
 import { LoginPage } from './components/LoginPage';
 import type { SearchResult } from './types/asset';
 
 export default function App() {
-  const { isAuthenticated, isLoading, login } = useAuth();
+  const { isAuthenticated, isLoading, login, logout } = useAuth();
 
   if (isLoading) {
     return (
@@ -31,10 +31,10 @@ export default function App() {
     return <LoginPage onLogin={login} />;
   }
 
-  return <AuthenticatedApp />;
+  return <AuthenticatedApp onLogout={logout} />;
 }
 
-function AuthenticatedApp() {
+function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [view, setView] = useState<'library' | 'settings' | 'import'>('library');
   const [searchQuery, setSearchQuery] = useState('');
@@ -95,22 +95,22 @@ function AuthenticatedApp() {
     [clearTags]
   );
 
+  const [isUploading, setIsUploading] = useState(false);
+  const [completedSinceLastVisit, setCompletedSinceLastVisit] = useState(0);
+
   const handleImportComplete = useCallback(() => {
     if (view !== 'import') {
       setCompletedSinceLastVisit(c => c + 1);
     }
   }, [view]);
 
+  const { inProgress, recentCompleted } = useIngestingAssets(handleImportComplete);
+  const isIngesting = inProgress.length > 0;
+
   const handleViewAssetFromToast = useCallback((assetId: string) => {
     setSelectedAssetId(assetId);
     setView('library');
   }, []);
-
-  const [isUploading, setIsUploading] = useState(false);
-  const [completedSinceLastVisit, setCompletedSinceLastVisit] = useState(0);
-
-  const { data: allAssets } = useAssets();
-  const isIngesting = allAssets?.some(a => a.status === 'ingesting') ?? false;
 
   const handleGlobalDrop = useCallback(
     async (file: File) => {
@@ -151,6 +151,9 @@ function AuthenticatedApp() {
       completedSinceLastVisit={completedSinceLastVisit}
       viewMode={viewMode}
       onViewModeChange={handleViewModeChange}
+      inProgress={inProgress}
+      recentCompleted={recentCompleted}
+      onLogout={onLogout}
     />
   );
 
@@ -202,9 +205,8 @@ function AuthenticatedApp() {
               )}
               {view === 'settings' && <SettingsPage />}
               {view === 'import' && (
-                <ImportView
+                <ImportQueueView
                   onViewAsset={handleViewAssetFromToast}
-                  onImportComplete={handleImportComplete}
                 />
               )}
             </motion.div>

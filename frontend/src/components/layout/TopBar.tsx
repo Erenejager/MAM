@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import { Search, X, Upload, Settings, Video, Library, LayoutGrid, List, LogOut, Tag, Loader2 } from 'lucide-react';
+import { Search, X, Upload, Settings, Video, Library, LayoutGrid, List, LogOut, Loader2 } from 'lucide-react';
 import { FilterBar } from './FilterBar';
 import { MediaSphereLogo } from './MediaSphereLogo';
 import { useSuggest } from '../../hooks/useSuggest';
+import { ImportPopover } from '../import/ImportPopover';
+import type { Asset } from '../../types/asset';
 
 interface TopBarProps {
   onSearch: (query: string) => void;
@@ -19,6 +21,8 @@ interface TopBarProps {
   completedSinceLastVisit?: number;
   viewMode: 'grid' | 'list';
   onViewModeChange: (mode: 'grid' | 'list') => void;
+  inProgress: Asset[];
+  recentCompleted: Asset[];
   onLogout: () => void;
 }
 
@@ -37,9 +41,31 @@ export function TopBar({
   completedSinceLastVisit,
   viewMode,
   onViewModeChange,
+  inProgress,
+  recentCompleted,
   onLogout,
 }: TopBarProps) {
   const [expanded, setExpanded] = useState(false);
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const popoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleImportMouseEnter = () => {
+    if (popoverTimeout.current) clearTimeout(popoverTimeout.current);
+    setPopoverOpen(true);
+  };
+
+  const handleImportMouseLeave = () => {
+    popoverTimeout.current = setTimeout(() => setPopoverOpen(false), 150);
+  };
+
+  useEffect(() => {
+    if (!popoverOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPopoverOpen(false);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [popoverOpen]);
   const [inputValue, setInputValue] = useState(searchQuery);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -105,6 +131,25 @@ export function TopBar({
   );
   const [highlightIndex, setHighlightIndex] = useState(-1);
 
+  // Inline autocomplete: ghost text completes the last word being typed
+  const ghostCompletion = (() => {
+    const trimmed = inputValue.trim().toLowerCase();
+    if (trimmed.length < 2 || !apiSuggestions.length) return '';
+    // Get the last word being typed
+    const words = trimmed.split(/\s+/);
+    const lastWord = words[words.length - 1];
+    if (lastWord.length < 2) return '';
+    // Prefer word-type suggestions that complete the last word
+    const wordMatch = apiSuggestions.find(
+      (s) => s.type === 'word' && s.text.toLowerCase().startsWith(lastWord),
+    );
+    if (wordMatch) return wordMatch.text.slice(lastWord.length);
+    return '';
+  })();
+
+  // Non-word suggestions for the dropdown (assets + tags)
+  const dropdownSuggestions = apiSuggestions.filter((s) => s.type !== 'word');
+
   // Reset highlight when suggestions change
   useEffect(() => { setHighlightIndex(-1); }, [apiSuggestions]);
 
@@ -163,41 +208,61 @@ export function TopBar({
             /* Expanded input + dropdown */
             <div className="relative">
               <form onSubmit={handleSubmit}>
-                <div className="flex items-center gap-sm py-[7px] px-sm bg-glass-strong border border-cta/30 rounded-t-[10px] rounded-b-none glass-blur shadow-[0_0_0_3px_rgba(225,29,72,0.08)]">
+                <div className="flex items-center gap-sm py-[7px] px-sm bg-glass-strong border-0 rounded-t-[10px] rounded-b-none glass-blur">
                   <Search size={14} className="text-cta opacity-70 shrink-0" />
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') {
-                        setExpanded(false);
-                      } else if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        setHighlightIndex((i) =>
-                          i < apiSuggestions.length - 1 ? i + 1 : 0,
-                        );
-                      } else if (e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        setHighlightIndex((i) =>
-                          i > 0 ? i - 1 : apiSuggestions.length - 1,
-                        );
-                      } else if (e.key === 'Enter' && highlightIndex >= 0) {
-                        e.preventDefault();
-                        const picked = apiSuggestions[highlightIndex];
-                        if (picked.type === 'asset' && picked.id) {
-                          handleSelectAsset(picked.id);
-                        } else {
-                          setInputValue(picked.text);
-                          onSearch(picked.text);
+                  <div className="flex-1 relative overflow-hidden text-xs leading-4">
+                    {/* Ghost completion overlay — exact same position as input text */}
+                    {ghostCompletion && (
+                      <div
+                        aria-hidden
+                        className="absolute top-0 left-0 right-0 h-full flex items-center pointer-events-none select-none overflow-hidden"
+                      >
+                        <span className="text-xs leading-4 invisible whitespace-pre">{inputValue}</span>
+                        <span className="text-xs leading-4 whitespace-pre truncate text-text-dim/60">{ghostCompletion}</span>
+                      </div>
+                    )}
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={inputValue}
+                      onChange={(e) => setInputValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Tab' && ghostCompletion) {
+                          e.preventDefault();
+                          setInputValue(inputValue + ghostCompletion);
+                        } else if (e.key === 'Escape') {
                           setExpanded(false);
+                        } else if (e.key === 'ArrowDown') {
+                          e.preventDefault();
+                          setHighlightIndex((i) =>
+                            i < dropdownSuggestions.length - 1 ? i + 1 : 0,
+                          );
+                        } else if (e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          setHighlightIndex((i) =>
+                            i > 0 ? i - 1 : dropdownSuggestions.length - 1,
+                          );
+                        } else if (e.key === 'Enter' && highlightIndex >= 0) {
+                          e.preventDefault();
+                          const picked = dropdownSuggestions[highlightIndex];
+                          if (picked.id) {
+                            handleSelectAsset(picked.id);
+                          } else {
+                            setInputValue(picked.text);
+                            onSearch(picked.text);
+                            setExpanded(false);
+                          }
                         }
-                      }
-                    }}
-                    placeholder="Search assets, tags, actions..."
-                    className="flex-1 bg-transparent text-xs text-text outline-none placeholder:text-text-dim"
-                  />
+                      }}
+                      placeholder="Search assets, tags, actions..."
+                      className="relative w-full bg-transparent text-xs leading-4 text-text outline-none focus-visible:outline-none placeholder:text-text-dim"
+                    />
+                  </div>
+                  {ghostCompletion && (
+                    <span className="shrink-0 py-[1px] px-[5px] bg-glass-hover rounded text-[9px] font-mono text-text-dim/50 pointer-events-none">
+                      Tab
+                    </span>
+                  )}
                   {inputValue && (
                     <button type="button" onClick={handleClear} className="text-text-dim hover:text-text transition-colors">
                       <X size={14} />
@@ -208,7 +273,7 @@ export function TopBar({
 
               {/* Inline dropdown */}
               {showDropdown && (
-                <div className="absolute left-0 right-0 top-full bg-[rgba(15,15,30,0.95)] glass-blur-xl border border-t-0 border-cta/20 rounded-b-[10px] shadow-lg overflow-hidden z-50 max-h-[320px] overflow-y-auto">
+                <div className="absolute left-0 right-0 top-full bg-[rgba(15,15,30,0.95)] glass-blur-xl border-0 rounded-b-[10px] shadow-lg overflow-hidden z-50 max-h-[320px] overflow-y-auto">
                   {/* Actions */}
                   <div className="px-sm pt-sm pb-xs">
                     <div className="text-[9px] font-semibold text-text-dim uppercase tracking-wider mb-xs">Actions</div>
@@ -246,17 +311,17 @@ export function TopBar({
                             <Loader2 size={10} className="animate-spin" />
                             Searching...
                           </>
-                        ) : apiSuggestions.length > 0 ? (
-                          `${apiSuggestions.length} match${apiSuggestions.length === 1 ? '' : 'es'}`
+                        ) : dropdownSuggestions.length > 0 ? (
+                          `${dropdownSuggestions.length} match${dropdownSuggestions.length === 1 ? '' : 'es'}`
                         ) : (
                           `No matches for "${inputValue.trim()}"`
                         )}
                       </div>
-                      {apiSuggestions.map((s, i) => (
+                      {dropdownSuggestions.map((s, i) => (
                         <button
                           key={s.type + (s.id ?? s.text)}
                           onClick={() => {
-                            if (s.type === 'asset' && s.id) {
+                            if (s.id) {
                               handleSelectAsset(s.id);
                             } else {
                               setInputValue(s.text);
@@ -268,11 +333,7 @@ export function TopBar({
                             i === highlightIndex ? 'bg-glass-hover text-text' : ''
                           }`}
                         >
-                          {s.type === 'asset' ? (
-                            <Video size={13} className="opacity-50 shrink-0" />
-                          ) : (
-                            <Tag size={13} className="opacity-50 shrink-0" />
-                          )}
+                          <Video size={13} className="opacity-50 shrink-0" />
                           <span className="truncate">{highlightMatch(s.text)}</span>
                         </button>
                       ))}
@@ -284,14 +345,11 @@ export function TopBar({
           )}
         </div>
 
-        {/* Spacer to center search */}
-        <div className="flex-1" />
-
-        {/* View toggle — grid vs list */}
+        {/* View toggle — grid vs list, next to search */}
         <div
           role="radiogroup"
           aria-label="View mode"
-          className="flex items-center bg-[rgba(255,255,255,0.02)] border border-glass-border rounded-[6px] overflow-hidden shrink-0"
+          className="flex items-center bg-[rgba(255,255,255,0.02)] border border-glass-border rounded-[6px] overflow-hidden shrink-0 ml-sm"
         >
           <button
             role="radio"
@@ -322,6 +380,9 @@ export function TopBar({
           </button>
         </div>
 
+        {/* Spacer to push nav to right */}
+        <div className="flex-1" />
+
         {/* Pill tabs */}
         <div className="flex items-center gap-[2px] bg-[rgba(255,255,255,0.02)] border border-glass-border rounded-[8px] p-[3px] flex-shrink-0">
           <button
@@ -331,39 +392,55 @@ export function TopBar({
             <Library size={11} />
             Library
           </button>
-          <button
-            onClick={() => onNavigate('import')}
-            className={`${pillBase} ${activeView === 'import' ? pillActive : pillInactive} ${
-              isIngesting && activeView !== 'import'
-                ? '!border-cta/20 !bg-cta/8 !text-cta'
-                : ''
-            }`}
+          <div
+            className="relative"
+            onMouseEnter={handleImportMouseEnter}
+            onMouseLeave={handleImportMouseLeave}
           >
-            <Upload size={11} />
-            Import
-            {isIngesting && (
-              <span
-                className="w-[6px] h-[6px] rounded-full bg-cta ml-[2px]"
-                style={{ animation: 'pulse 1.5s ease-in-out infinite' }}
-                aria-label="Import in progress"
+            <button
+              onClick={() => onNavigate('import')}
+              className={`${pillBase} ${activeView === 'import' ? pillActive : pillInactive} ${
+                isIngesting && activeView !== 'import'
+                  ? '!border-cta/20 !bg-cta/8 !text-cta'
+                  : ''
+              }`}
+            >
+              <Upload size={11} />
+              Import
+              {isIngesting && (
+                <span
+                  className="w-[6px] h-[6px] rounded-full bg-cta ml-[2px]"
+                  style={{ animation: 'pulse 1.5s ease-in-out infinite' }}
+                  aria-label="Import in progress"
+                />
+              )}
+              {!isIngesting && (completedSinceLastVisit ?? 0) > 0 && (
+                <span
+                  style={{
+                    padding: '1px 5px',
+                    background: '#E11D48',
+                    borderRadius: 99,
+                    fontSize: 8,
+                    color: 'white',
+                    fontWeight: 600,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {completedSinceLastVisit}
+                </span>
+              )}
+            </button>
+            {popoverOpen && (
+              <ImportPopover
+                inProgress={inProgress}
+                recentCompleted={recentCompleted}
+                onNavigateToImport={() => {
+                  setPopoverOpen(false);
+                  onNavigate('import');
+                }}
               />
             )}
-            {!isIngesting && (completedSinceLastVisit ?? 0) > 0 && (
-              <span
-                style={{
-                  padding: '1px 5px',
-                  background: '#E11D48',
-                  borderRadius: 99,
-                  fontSize: 8,
-                  color: 'white',
-                  fontWeight: 600,
-                  lineHeight: 1.4,
-                }}
-              >
-                {completedSinceLastVisit}
-              </span>
-            )}
-          </button>
+          </div>
           <button
             onClick={() => onNavigate('settings')}
             className={`${pillBase} ${activeView === 'settings' ? pillActive : pillInactive}`}
