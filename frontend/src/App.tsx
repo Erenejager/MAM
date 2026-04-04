@@ -203,7 +203,9 @@ function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
                   viewMode={viewMode}
                 />
               )}
-              {view === 'settings' && <SettingsPage />}
+              {view === 'settings' && (
+                <SettingsPage viewMode={viewMode} onViewModeChange={handleViewModeChange} />
+              )}
               {view === 'import' && (
                 <ImportQueueView
                   onViewAsset={handleViewAssetFromToast}

@@ -14,11 +14,12 @@ import { assetRoutes } from './routes/assets.js';
 import { customFieldRoutes } from './routes/custom-fields.js';
 import { searchRoutes } from './routes/search.js';
 import { suggestRoutes } from './routes/suggest.js';
+import { settingsRoutes } from './routes/settings.js';
 import { authRoutes } from './routes/auth.js';
 import { registerAuthMiddleware } from './middleware/auth.js';
 import './db/index.js'; // 3. Triggers DB connection
 
-const server = Fastify({ logger: true });
+const server = Fastify({ logger: true, bodyLimit: 10 * 1024 * 1024 * 1024 }); // 10 GB
 
 server.get('/api/health', async () => {
   return { status: 'ok', timestamp: new Date().toISOString() };
@@ -77,6 +78,9 @@ const start = async () => {
 
   // 6d. Register suggest routes (autocomplete via SQLite)
   await server.register(suggestRoutes);
+
+  // 6e. Register settings routes (service status)
+  await server.register(settingsRoutes);
 
   // 6b. Serve uploaded files from STORAGE_ROOT
   await server.register(fastifyStatic, {
