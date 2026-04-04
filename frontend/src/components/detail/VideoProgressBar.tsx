@@ -1,11 +1,13 @@
 // frontend/src/components/detail/VideoProgressBar.tsx
 import { useEffect, useRef, useState, useCallback } from 'react';
+import type { TimelineMoment } from './VideoPlayer';
 
 interface VideoProgressBarProps {
   videoRef: React.RefObject<HTMLVideoElement>;
+  moments?: TimelineMoment[];
 }
 
-export function VideoProgressBar({ videoRef }: VideoProgressBarProps) {
+export function VideoProgressBar({ videoRef, moments = [] }: VideoProgressBarProps) {
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -13,6 +15,9 @@ export function VideoProgressBar({ videoRef }: VideoProgressBarProps) {
   const [dragging, setDragging] = useState(false);
   const [tooltipTime, setTooltipTime] = useState(0);
   const [tooltipX, setTooltipX] = useState(0);
+  const [hoveredMomentIdx, setHoveredMomentIdx] = useState<number | null>(null);
+  const [floatingCard, setFloatingCard] = useState<{ index: number; fadeOut: boolean } | null>(null);
+  const floatingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
 
   // Sync progress with video timeupdate
@@ -128,6 +133,23 @@ export function VideoProgressBar({ videoRef }: VideoProgressBarProps) {
     [videoRef, duration]
   );
 
+  const showFloatingCard = useCallback((index: number) => {
+    if (floatingTimerRef.current) clearTimeout(floatingTimerRef.current);
+    setFloatingCard({ index, fadeOut: false });
+    floatingTimerRef.current = setTimeout(() => {
+      setFloatingCard((prev) => prev ? { ...prev, fadeOut: true } : null);
+      floatingTimerRef.current = setTimeout(() => {
+        setFloatingCard(null);
+      }, 300);
+    }, 3000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (floatingTimerRef.current) clearTimeout(floatingTimerRef.current);
+    };
+  }, []);
+
   // Respect prefers-reduced-motion
   const prefersReducedMotion =
     typeof window !== 'undefined' &&
@@ -145,7 +167,7 @@ export function VideoProgressBar({ videoRef }: VideoProgressBarProps) {
       onMouseMove={handleMouseMove}
     >
       {/* Time tooltip */}
-      {expanded && (
+      {expanded && hoveredMomentIdx === null && (
         <div
           className="absolute font-mono text-[10px] px-[6px] py-[2px] rounded-md pointer-events-none"
           style={{
@@ -159,6 +181,123 @@ export function VideoProgressBar({ videoRef }: VideoProgressBarProps) {
           }}
         >
           {formatTime(tooltipTime)}
+        </div>
+      )}
+
+      {/* Moment tick marks */}
+      {moments.length > 0 && (
+        <div className="absolute bottom-0 left-0 right-0 pointer-events-none" style={{ height: 20 }}>
+          {moments.map((m, i) => {
+            const isHovered = hoveredMomentIdx === i;
+            const isCluster = m.count > 1;
+            return (
+              <div
+                key={`${m.timestamp}-${i}`}
+                className="absolute pointer-events-auto cursor-pointer"
+                style={{
+                  left: `${m.position * 100}%`,
+                  bottom: barHeight + 2,
+                  transform: 'translateX(-50%)',
+                  width: isHovered ? 2 : isCluster ? 3 : 2,
+                  height: isHovered ? 12 : isCluster ? 9 : 8,
+                  background: isHovered
+                    ? '#E11D48'
+                    : isCluster
+                      ? 'rgba(225,29,72,0.55)'
+                      : 'rgba(225,29,72,0.4)',
+                  borderRadius: 1,
+                  boxShadow: isHovered ? '0 0 6px rgba(225,29,72,0.4)' : 'none',
+                  transition: 'height 100ms ease-out, background 100ms ease-out',
+                }}
+                onMouseEnter={() => setHoveredMomentIdx(i)}
+                onMouseLeave={() => setHoveredMomentIdx(null)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const video = videoRef.current;
+                  if (video) video.currentTime = m.timestamp;
+                  showFloatingCard(i);
+                }}
+                role="button"
+                aria-label={`Moment at ${formatTime(m.timestamp)}: ${m.label}`}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {/* Moment hover tooltip */}
+      {hoveredMomentIdx !== null && moments[hoveredMomentIdx] && !dragging && floatingCard?.index !== hoveredMomentIdx && (
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            left: `${moments[hoveredMomentIdx].position * 100}%`,
+            bottom: barHeight + 16,
+            transform: 'translateX(-50%)',
+            background: 'rgba(15,15,30,0.95)',
+            border: '1px solid rgba(225,29,72,0.2)',
+            borderRadius: 8,
+            padding: '6px 10px',
+            backdropFilter: 'blur(12px)',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+            whiteSpace: 'nowrap',
+            zIndex: 20,
+          }}
+        >
+          <div className="flex items-center gap-[6px]">
+            <span className="font-mono text-[11px] font-semibold text-cta">
+              {formatTime(moments[hoveredMomentIdx].timestamp)}
+            </span>
+            <span className="text-[11px] font-semibold text-[#e4e4e7]">
+              {moments[hoveredMomentIdx].label}
+            </span>
+          </div>
+          {(moments[hoveredMomentIdx].score || moments[hoveredMomentIdx].set_period) && (
+            <div className="text-[10px] text-[#a1a1aa] mt-[1px]">
+              {[moments[hoveredMomentIdx].score, moments[hoveredMomentIdx].set_period]
+                .filter(Boolean)
+                .join(' | ')}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Floating card (post-click) */}
+      {floatingCard !== null && moments[floatingCard.index] && (
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            left: `${moments[floatingCard.index].position * 100}%`,
+            bottom: barHeight + 16,
+            transform: 'translateX(-50%)',
+            background: 'rgba(15,15,30,0.95)',
+            border: '1px solid rgba(225,29,72,0.2)',
+            borderRadius: 8,
+            padding: '6px 10px',
+            backdropFilter: 'blur(12px)',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+            whiteSpace: 'nowrap',
+            zIndex: 20,
+            opacity: floatingCard.fadeOut ? 0 : 1,
+            transition: 'opacity 300ms ease-out',
+          }}
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-[6px]">
+            <span className="font-mono text-[11px] font-semibold text-cta">
+              {formatTime(moments[floatingCard.index].timestamp)}
+            </span>
+            <span className="text-[11px] font-semibold text-[#e4e4e7]">
+              {moments[floatingCard.index].label}
+            </span>
+          </div>
+          {(moments[floatingCard.index].score || moments[floatingCard.index].set_period) && (
+            <div className="text-[10px] text-[#a1a1aa] mt-[1px]">
+              {[moments[floatingCard.index].score, moments[floatingCard.index].set_period]
+                .filter(Boolean)
+                .join(' | ')}
+            </div>
+          )}
         </div>
       )}
 
