@@ -1,9 +1,40 @@
-import { forwardRef, useEffect, useState, useCallback } from 'react';
-import { Play, Pause, Volume2, VolumeX, Maximize } from 'lucide-react';
+import { forwardRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Eye, EyeOff } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { storageUrl } from '../../lib/api';
 import type { Asset } from '../../types/asset';
 import { VideoProgressBar } from './VideoProgressBar';
+
+export interface TimelineMoment {
+  timestamp: number;
+  label: string;
+  score: string | null;
+  set_period: string | null;
+  position: number;
+  count: number;
+}
+
+function mergeMoments(
+  raw: Array<{ timestamp: number; label: string; score: string | null; set_period: string | null }>,
+  duration: number,
+): TimelineMoment[] {
+  if (!duration || duration <= 0) return [];
+  const sorted = [...raw].sort((a, b) => a.timestamp - b.timestamp);
+  const merged: TimelineMoment[] = [];
+  const threshold = 0.01;
+
+  for (const m of sorted) {
+    const pos = m.timestamp / duration;
+    if (pos < 0 || pos > 1) continue;
+    const last = merged[merged.length - 1];
+    if (last && pos - last.position < threshold) {
+      last.count++;
+    } else {
+      merged.push({ ...m, position: pos, count: 1 });
+    }
+  }
+  return merged;
+}
 
 interface VideoPlayerProps {
   asset: Asset;
@@ -16,6 +47,20 @@ export const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
+    const [momentsVisible, setMomentsVisible] = useState(true);
+
+    const moments = useMemo<TimelineMoment[]>(() => {
+      if (asset.ocrStatus !== 'complete' || !asset.ocrKeyMoments) return [];
+      try {
+        const parsed = JSON.parse(asset.ocrKeyMoments);
+        if (!Array.isArray(parsed)) return [];
+        return mergeMoments(parsed, duration);
+      } catch {
+        return [];
+      }
+    }, [asset.ocrStatus, asset.ocrKeyMoments, duration]);
+
+    const hasMoments = moments.length > 0;
 
     const videoRefCb = useCallback(
       (el: HTMLVideoElement | null) => {
@@ -127,7 +172,10 @@ export const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
           </AnimatePresence>
 
           {/* Progress bar on video bottom edge */}
-          <VideoProgressBar videoRef={videoRefObj} />
+          <VideoProgressBar
+            videoRef={videoRefObj}
+            moments={momentsVisible ? moments : []}
+          />
         </div>
 
         {/* Compact controls bar */}
@@ -156,8 +204,20 @@ export const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
             </span>
           </div>
 
-          {/* Right group: volume + fullscreen */}
+          {/* Right group: moments toggle + volume + fullscreen */}
           <div className="flex items-center gap-[8px]">
+            {hasMoments && (
+              <button
+                onClick={() => setMomentsVisible((v) => !v)}
+                className={`transition-colors cursor-pointer ${
+                  momentsVisible ? 'text-cta' : 'text-[#52525b] hover:text-[#71717a]'
+                }`}
+                aria-label="Toggle moment markers"
+                aria-pressed={momentsVisible}
+              >
+                {momentsVisible ? <Eye size={14} /> : <EyeOff size={14} />}
+              </button>
+            )}
             <button
               onClick={toggleMute}
               className="text-[#71717a] hover:text-[#e4e4e7] transition-colors cursor-pointer"
