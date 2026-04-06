@@ -19,6 +19,7 @@ export interface OcrOutput {
   competition: string | null;
   players: string[];
   keyMoments: KeyMoment[];
+  enriched?: boolean;
 }
 
 export function processResults(results: VisionResult[]): OcrOutput {

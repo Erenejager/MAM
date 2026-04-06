@@ -4,8 +4,10 @@ import { scoreTranscript, type TranscriptSegment } from './transcript-scoring.js
 import { computeAudioEnergy } from './audio-peaks.js';
 import { detectPeaks } from './peak-detection.js';
 import { refinePeaks } from './overlay-diff.js';
-import { analyzeFrames } from './vision-api.js';
-import { processResults, type OcrOutput } from './result-processing.js';
+import { identifyMatch, analyzeFrames } from './vision-api.js';
+import { processResults, curateKeyMoments, type OcrOutput } from './result-processing.js';
+import { findMomentBoundaries } from './moment-boundaries.js';
+import { enrichMoments } from './context-enrichment.js';
 
 export type { TranscriptSegment } from './transcript-scoring.js';
 export type { OcrOutput } from './result-processing.js';
@@ -19,12 +21,14 @@ export async function runOcrPipeline(
   const tempDir = resolve(assetDir, 'ocr_temp');
 
   try {
-    const transcriptScores = scoreTranscript(transcriptSegments, durationSeconds);
-    const audioEnergies = await computeAudioEnergy(videoPath, durationSeconds);
-    const coarsePeaks = detectPeaks(transcriptScores, audioEnergies);
+    const [transcriptScores, audioEnergies] = await Promise.all([
+      scoreTranscript(transcriptSegments, durationSeconds),
+      computeAudioEnergy(videoPath, durationSeconds),
+    ]);
+    const coarsePeaks = detectPeaks(transcriptScores, audioEnergies, durationSeconds);
 
     if (coarsePeaks.length === 0) {
-      return { sport: null, competition: null, players: [], keyMoments: [] };
+      return { sport: null, competition: null, players: [], keyMoments: [], enriched: false };
     }
 
     const refinedPeaks = await refinePeaks(
@@ -34,11 +38,50 @@ export async function runOcrPipeline(
       tempDir,
     );
 
-    const visionResults = await analyzeFrames(refinedPeaks);
+    // Pass 1: Quick identification of sport/players/competition from a few frames
+    const matchCtx = await identifyMatch(refinedPeaks);
 
-    const output = processResults(visionResults);
+    // Pass 2: Full analysis with context + 3 frames per peak
+    const visionResults = await analyzeFrames(refinedPeaks, matchCtx);
 
-    return output;
+    const rawOutput = processResults(visionResults);
+
+    // Pass 3: LLM curation — deduplicate, filter, shorten labels
+    const output = await curateKeyMoments(rawOutput);
+
+    // Pass 4: Find moment boundaries — scan audio for silence gaps
+    // to shift timestamps from peak (crowd roar) to action start (serve/kick)
+    let finalMoments = output.keyMoments;
+    if (output.keyMoments.length > 0) {
+      console.log(`[ocr] Finding moment boundaries for ${output.keyMoments.length} moments...`);
+      const bounded = await findMomentBoundaries(
+        videoPath,
+        output.keyMoments,
+        durationSeconds,
+      );
+      console.log(`[ocr] Moment boundaries computed — timestamps shifted to action start`);
+      finalMoments = bounded;
+
+      // Pass 5: Context enrichment — store rich per-moment data to disk
+      console.log(`[ocr] Enriching ${bounded.length} moments with context data...`);
+      try {
+        await enrichMoments({
+          videoPath,
+          assetDir,
+          durationSeconds,
+          moments: bounded,
+          transcriptSegments,
+          sport: output.sport,
+          competition: output.competition,
+        });
+        console.log(`[ocr] Context enrichment complete`);
+      } catch (err) {
+        console.error('[ocr] Context enrichment failed:', err);
+        // Non-fatal — pipeline result is still valid without enrichment on disk
+      }
+    }
+
+    return { ...output, keyMoments: finalMoments, enriched: true };
   } finally {
     await rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }

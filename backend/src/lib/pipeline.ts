@@ -1,5 +1,5 @@
 import { resolve, basename, dirname } from 'node:path';
-import { unlink, writeFile, readFile, rm } from 'node:fs/promises';
+import { unlink, writeFile, readFile, rm, stat, mkdir } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import ffmpeg from 'fluent-ffmpeg';
 import Groq from 'groq-sdk';
@@ -139,40 +139,98 @@ interface TranscriptResult {
   segments: Segment[];
 }
 
-async function transcribeWithGroq(filePath: string): Promise<TranscriptResult> {
-  const tempPath = filePath.replace(/\.[^.]+$/, '-audio.ogg');
-  try {
-    // Extract 16 kHz mono OGG — required by Groq (25 MB limit; OGG is far smaller than raw video)
-    await new Promise<void>((resolve, reject) => {
-      ffmpeg(filePath)
-        .noVideo()
-        .audioFrequency(16000)
-        .audioChannels(1)
-        .audioCodec('libvorbis')
-        .output(tempPath)
-        .on('end', () => resolve())
-        .on('error', (err: Error) => reject(err))
-        .run();
-    });
+const MAX_CHUNK_SIZE = 24 * 1024 * 1024; // 24 MB (safe margin under 25 MB limit)
+const CHUNK_DURATION_SECONDS = 600; // 10-minute chunks
 
-    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-    const result = await groq.audio.transcriptions.create({
-      file: createReadStream(tempPath),
+async function extractAudioChunk(
+  filePath: string,
+  outputPath: string,
+  startSeconds?: number,
+  durationSeconds?: number,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    let cmd = ffmpeg(filePath).noVideo().audioFrequency(16000).audioChannels(1).audioCodec('libvorbis');
+    if (startSeconds !== undefined) cmd = cmd.setStartTime(startSeconds);
+    if (durationSeconds !== undefined) cmd = cmd.setDuration(durationSeconds);
+    cmd.output(outputPath).on('end', () => resolve()).on('error', (err: Error) => reject(err)).run();
+  });
+}
+
+async function transcribeChunk(
+  groq: Groq,
+  chunkPath: string,
+  offsetSeconds: number,
+): Promise<{ text: string; segments: Segment[] }> {
+  const result = await withRetry(async () => {
+    return groq.audio.transcriptions.create({
+      file: createReadStream(chunkPath),
       model: 'whisper-large-v3',
       response_format: 'verbose_json',
     });
+  });
 
-    const segments: Segment[] = ((result as any).segments ?? []).map(
-      (s: { start: number; end: number; text: string }) => ({
-        start: s.start,
-        end: s.end,
-        text: s.text.trim(),
-      }),
-    );
+  const segments: Segment[] = ((result as any).segments ?? []).map(
+    (s: { start: number; end: number; text: string }) => ({
+      start: s.start + offsetSeconds,
+      end: s.end + offsetSeconds,
+      text: s.text.trim(),
+    }),
+  );
 
-    return { text: result.text ?? '', segments };
+  return { text: result.text ?? '', segments };
+}
+
+async function transcribeWithGroq(filePath: string): Promise<TranscriptResult> {
+  const tempDir = resolve(dirname(filePath), 'audio_chunks');
+  await mkdir(tempDir, { recursive: true });
+
+  try {
+    // First extract full audio to check size
+    const fullAudioPath = resolve(tempDir, 'full.ogg');
+    await extractAudioChunk(filePath, fullAudioPath);
+    const { size } = await stat(fullAudioPath);
+
+    // If small enough, send as single file (no chunking needed)
+    if (size <= MAX_CHUNK_SIZE) {
+      console.log(`[transcribe] Audio ${(size / 1024 / 1024).toFixed(1)}MB — single request`);
+      const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+      const result = await transcribeChunk(groq, fullAudioPath, 0);
+      return { text: result.text, segments: result.segments };
+    }
+
+    // Need chunking — get duration from ffprobe
+    await unlink(fullAudioPath).catch(() => {});
+    const duration = await new Promise<number>((resolve, reject) => {
+      ffmpeg.ffprobe(filePath, (err, metadata) => {
+        if (err) return reject(err);
+        resolve(metadata.format.duration ?? 0);
+      });
+    });
+
+    const chunkCount = Math.ceil(duration / CHUNK_DURATION_SECONDS);
+    console.log(`[transcribe] Audio ${(size / 1024 / 1024).toFixed(1)}MB — splitting into ${chunkCount} chunks of ${CHUNK_DURATION_SECONDS / 60}min`);
+
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    const allSegments: Segment[] = [];
+    const allTexts: string[] = [];
+
+    for (let i = 0; i < chunkCount; i++) {
+      const startSec = i * CHUNK_DURATION_SECONDS;
+      const chunkPath = resolve(tempDir, `chunk_${i}.ogg`);
+
+      await extractAudioChunk(filePath, chunkPath, startSec, CHUNK_DURATION_SECONDS);
+      console.log(`[transcribe] Chunk ${i + 1}/${chunkCount} (${Math.floor(startSec / 60)}min–${Math.floor(Math.min(startSec + CHUNK_DURATION_SECONDS, duration) / 60)}min)`);
+
+      const result = await transcribeChunk(groq, chunkPath, startSec);
+      allTexts.push(result.text);
+      allSegments.push(...result.segments);
+
+      await unlink(chunkPath).catch(() => {});
+    }
+
+    return { text: allTexts.join(' '), segments: allSegments };
   } finally {
-    await unlink(tempPath).catch(() => {});
+    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }
 }
 
@@ -271,6 +329,7 @@ export async function runPipeline(assetId: string): Promise<void> {
   }
 
   // ── Stage 3: Transcription (soft failure — asset usable without transcript) ─
+  let transcriptOk = false;
   if (!process.env.GROQ_API_KEY) {
     updateAsset(assetId, { transcriptionStatus: 'skipped' });
   } else {
@@ -285,18 +344,18 @@ export async function runPipeline(assetId: string): Promise<void> {
         transcriptText: transcript.text,
         transcriptPath: transcriptRelPath,
       });
+      transcriptOk = true;
     } catch (err) {
       console.error(`[pipeline] Stage 3 (transcription) failed for ${assetId}:`, err);
       updateAsset(assetId, {
         transcriptionStatus: 'failed',
         transcriptionError: err instanceof Error ? err.message : String(err),
       });
-      // Soft fail — continue to next stage
     }
   }
 
   // ── Stage: OCR Key Moments ──────────────────────────────────────────────────
-  if (!process.env.GEMINI_API_KEY) {
+  if (!process.env.GEMINI_API_KEY || !transcriptOk) {
     updateAsset(assetId, { ocrStatus: 'skipped' });
   } else {
     updateAsset(assetId, { ocrStatus: 'processing' });
@@ -313,7 +372,7 @@ export async function runPipeline(assetId: string): Promise<void> {
         // No transcript available — OCR will rely on audio only
       }
 
-      const duration = asset.durationSeconds ?? 0;
+      const duration = meta.durationSeconds;
       if (duration < 10) {
         // Video too short for meaningful analysis
         updateAsset(assetId, { ocrStatus: 'skipped' });
@@ -334,6 +393,7 @@ export async function runPipeline(assetId: string): Promise<void> {
             ocrCompetition: result.competition,
             ocrPlayers: result.players.length > 0 ? JSON.stringify(result.players) : null,
             ocrKeyMoments: JSON.stringify(result.keyMoments),
+            ocrEnriched: result.enriched ?? false,
           });
         }
       }
