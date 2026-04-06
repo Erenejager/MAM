@@ -8,16 +8,25 @@ export interface CoarsePeak {
   audioEnergy: number;
 }
 
-const MAX_PEAKS = 30;
+const MIN_PEAKS = 15;
+const MAX_PEAKS = 60;
 const MERGE_DISTANCE = 30;
+
+function computeMaxPeaks(durationSeconds: number): number {
+  const minutes = durationSeconds / 60;
+  return Math.min(MAX_PEAKS, Math.max(MIN_PEAKS, Math.round(minutes * 0.5 + 12)));
+}
 
 export function detectPeaks(
   transcriptScores: WindowScore[],
   audioEnergies: number[],
+  durationSeconds?: number,
 ): CoarsePeak[] {
+  const maxPeaks = durationSeconds ? computeMaxPeaks(durationSeconds) : MIN_PEAKS;
   const combined = transcriptScores.map((ts, i) => ({
     windowStart: ts.windowStart,
     windowEnd: ts.windowEnd,
+    keywordTimestamp: ts.keywordTimestamp,
     combinedScore: 0.6 * ts.transcriptScore + 0.4 * (audioEnergies[i] ?? 0),
     matchedKeyword: ts.matchedKeyword,
     transcriptText: ts.transcriptText,
@@ -38,7 +47,7 @@ export function detectPeaks(
 
   const merged: CoarsePeak[] = [];
   for (const peak of peaks) {
-    const timestamp = (peak.windowStart + peak.windowEnd) / 2;
+    const timestamp = peak.keywordTimestamp ?? (peak.windowStart + peak.windowEnd) / 2;
     const tooClose = merged.some(
       (m) => Math.abs(m.timestamp - timestamp) < MERGE_DISTANCE,
     );
@@ -51,7 +60,7 @@ export function detectPeaks(
         audioEnergy: peak.audioEnergy,
       });
     }
-    if (merged.length >= MAX_PEAKS) break;
+    if (merged.length >= maxPeaks) break;
   }
 
   merged.sort((a, b) => a.timestamp - b.timestamp);
