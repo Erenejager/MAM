@@ -43,6 +43,7 @@ export const assets = sqliteTable('assets', {
   ocrCompetition: text('ocr_competition'),
   ocrPlayers: text('ocr_players'),
   ocrKeyMoments: text('ocr_key_moments'),
+  ocrEnriched: integer('ocr_enriched', { mode: 'boolean' }).default(false),
 
   // User-editable
   title: text('title'),

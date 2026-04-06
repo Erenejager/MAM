@@ -1,0 +1,1 @@
+ALTER TABLE `assets` ADD `ocr_enriched` integer DEFAULT false;

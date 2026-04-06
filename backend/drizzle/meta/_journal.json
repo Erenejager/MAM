@@ -22,6 +22,13 @@
       "when": 1775252712342,
       "tag": "0002_silent_metal_master",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1775514903305,
+      "tag": "0003_regular_wonder_man",
+      "breakpoints": true
     }
   ]
 }
