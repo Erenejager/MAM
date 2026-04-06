@@ -119,7 +119,7 @@ export async function searchAssets(q: string, tags?: string[]): Promise<SearchRe
 }
 
 export interface Suggestion {
-  type: 'asset' | 'tag';
+  type: 'asset' | 'word';
   id: string | null;
   text: string;
 }
@@ -161,4 +161,51 @@ export async function logout(): Promise<void> {
     method: 'POST',
     credentials: 'include',
   });
+}
+
+// Moment context functions
+
+export async function fetchMomentContext(assetId: string, momentIndex: number): Promise<{
+  label: string;
+  score: string | null;
+  set_period: string | null;
+  game_time: string | null;
+  sport: string | null;
+  competition: string | null;
+  peakTime: number;
+  suggestedStartTime: number | undefined;
+  suggestedEndTime: number | undefined;
+  scoreBefore: string | null;
+  scoreAfter: string | null;
+  scoreChanged: boolean;
+  audioEnergy: number;
+  momentIndex: number;
+}> {
+  const res = await fetch(`${API_BASE}/assets/${assetId}/moments/${momentIndex}/context`, { credentials: 'include' });
+  if (!res.ok) throw new Error('Moment context not found');
+  return res.json();
+}
+
+export async function fetchMomentAudioCurve(assetId: string, momentIndex: number): Promise<{
+  offset: number;
+  peakTime: number;
+  energies: number[];
+}> {
+  const res = await fetch(`${API_BASE}/assets/${assetId}/moments/${momentIndex}/context?file=audio-curve.json`, { credentials: 'include' });
+  if (!res.ok) throw new Error('Audio curve not found');
+  return res.json();
+}
+
+export async function fetchMomentTranscript(assetId: string, momentIndex: number): Promise<Array<{
+  start: number;
+  end: number;
+  text: string;
+}>> {
+  const res = await fetch(`${API_BASE}/assets/${assetId}/moments/${momentIndex}/context?file=transcript.json`, { credentials: 'include' });
+  if (!res.ok) throw new Error('Transcript not found');
+  return res.json();
+}
+
+export function getMomentFrameUrl(assetId: string, momentIndex: number, filename: string): string {
+  return `${API_BASE}/assets/${assetId}/moments/${momentIndex}/frames/${filename}`;
 }
