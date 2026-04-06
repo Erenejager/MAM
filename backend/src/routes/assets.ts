@@ -1,10 +1,10 @@
 import { FastifyInstance } from 'fastify';
 import multipart from '@fastify/multipart';
 import { randomUUID } from 'node:crypto';
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, rm, readFile } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
-import { db } from '../db/index.js';
+import { db, rebuildTagsLookup } from '../db/index.js';
 import { assets } from '../db/schema.js';
 import { saveAndHash } from '../lib/hash.js';
 import { pipelineQueue } from '../lib/queue.js';
@@ -197,10 +197,10 @@ export async function assetRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get('/api/tags', async () => {
     const rows = db.$client
       .prepare(
-        `SELECT value as tag, COUNT(*) as count
-         FROM assets, json_each(assets.tags)
-         GROUP BY value
-         ORDER BY value`
+        `SELECT tag, COUNT(*) as count
+         FROM tags_lookup
+         GROUP BY tag
+         ORDER BY tag`
       )
       .all() as { tag: string; count: number }[];
     return rows;
@@ -265,6 +265,9 @@ export async function assetRoutes(fastify: FastifyInstance): Promise<void> {
     if (title !== undefined || description !== undefined || tags !== undefined) {
       db.update(assets).set(updates).where(eq(assets.id, id)).run();
 
+      // Keep tags_lookup in sync
+      if (tags !== undefined) rebuildTagsLookup();
+
       // Fire-and-forget partial OpenSearch update — only send changed fields
       const osDoc: Record<string, unknown> = {};
       if (title !== undefined) osDoc.title = title;
@@ -281,6 +284,60 @@ export async function assetRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     return db.select().from(assets).where(eq(assets.id, id)).get();
+  });
+
+  /**
+   * GET /api/assets/:id/moments/:index/context — serve JSON enrichment files
+   * Query params: file (context.json | audio-curve.json | transcript.json)
+   */
+  fastify.get<{
+    Params: { id: string; index: string };
+    Querystring: { file?: string };
+  }>('/api/assets/:id/moments/:index/context', async (req, reply) => {
+    const { id, index } = req.params;
+    const file = req.query.file ?? 'context.json';
+
+    if (!/^\d+$/.test(index)) {
+      return reply.code(400).send({ error: 'Invalid moment index' });
+    }
+
+    const allowedFiles = ['context.json', 'audio-curve.json', 'transcript.json'];
+    if (!allowedFiles.includes(file)) {
+      return reply.code(400).send({ error: 'Invalid file requested' });
+    }
+
+    const filePath = resolve(process.env.STORAGE_ROOT!, id, 'moments', index, file);
+    try {
+      const content = await readFile(filePath, 'utf-8');
+      return reply.type('application/json').send(content);
+    } catch {
+      return reply.code(404).send({ error: 'Moment context not found' });
+    }
+  });
+
+  /**
+   * GET /api/assets/:id/moments/:index/frames/:filename — serve individual frame JPEGs
+   */
+  fastify.get<{
+    Params: { id: string; index: string; filename: string };
+  }>('/api/assets/:id/moments/:index/frames/:filename', async (req, reply) => {
+    const { id, index, filename } = req.params;
+
+    if (!/^\d+$/.test(index)) {
+      return reply.code(400).send({ error: 'Invalid moment index' });
+    }
+
+    if (!filename.endsWith('.jpg') || filename.includes('..') || filename.includes('/')) {
+      return reply.code(400).send({ error: 'Invalid filename' });
+    }
+
+    const filePath = resolve(process.env.STORAGE_ROOT!, id, 'moments', index, 'frames', filename);
+    try {
+      const content = await readFile(filePath);
+      return reply.type('image/jpeg').send(content);
+    } catch {
+      return reply.code(404).send({ error: 'Frame not found' });
+    }
   });
 
   /**
