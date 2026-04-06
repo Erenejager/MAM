@@ -5,9 +5,10 @@ import type { TimelineMoment } from './VideoPlayer';
 interface VideoProgressBarProps {
   videoRef: React.RefObject<HTMLVideoElement>;
   moments?: TimelineMoment[];
+  onMomentContextToggle?: (index: number) => void;
 }
 
-export function VideoProgressBar({ videoRef, moments = [] }: VideoProgressBarProps) {
+export function VideoProgressBar({ videoRef, moments = [], onMomentContextToggle }: VideoProgressBarProps) {
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -264,7 +265,7 @@ export function VideoProgressBar({ videoRef, moments = [] }: VideoProgressBarPro
       {/* Floating card (post-click) */}
       {floatingCard !== null && moments[floatingCard.index] && (
         <div
-          className="absolute pointer-events-none"
+          className="absolute"
           style={{
             left: `${moments[floatingCard.index].position * 100}%`,
             bottom: barHeight + 16,
@@ -290,6 +291,18 @@ export function VideoProgressBar({ videoRef, moments = [] }: VideoProgressBarPro
             <span className="text-[11px] font-semibold text-[#e4e4e7]">
               {moments[floatingCard.index].label}
             </span>
+            {onMomentContextToggle && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMomentContextToggle(floatingCard.index);
+                }}
+                className="text-[10px] text-slate-400 hover:text-cta ml-1 cursor-pointer"
+                title="View enrichment context"
+              >
+                ⓘ
+              </button>
+            )}
           </div>
           {(moments[floatingCard.index].score || moments[floatingCard.index].set_period) && (
             <div className="text-[10px] text-[#a1a1aa] mt-[1px]">

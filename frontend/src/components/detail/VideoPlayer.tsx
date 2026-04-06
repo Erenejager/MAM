@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { storageUrl } from '../../lib/api';
 import type { Asset } from '../../types/asset';
 import { VideoProgressBar } from './VideoProgressBar';
+import { MomentContext } from './MomentContext';
 
 export interface TimelineMoment {
   timestamp: number;
@@ -48,6 +49,7 @@ export const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
     const [duration, setDuration] = useState(0);
     const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
     const [momentsVisible, setMomentsVisible] = useState(true);
+    const [openContextIndex, setOpenContextIndex] = useState<number | null>(null);
 
     const moments = useMemo<TimelineMoment[]>(() => {
       if (asset.ocrStatus !== 'complete' || !asset.ocrKeyMoments) return [];
@@ -175,6 +177,7 @@ export const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
           <VideoProgressBar
             videoRef={videoRefObj}
             moments={momentsVisible ? moments : []}
+            onMomentContextToggle={(index) => setOpenContextIndex(openContextIndex === index ? null : index)}
           />
         </div>
 
@@ -204,8 +207,15 @@ export const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
             </span>
           </div>
 
-          {/* Right group: moments toggle + volume + fullscreen */}
+          {/* Right group: volume + moments toggle + fullscreen */}
           <div className="flex items-center gap-[8px]">
+            <button
+              onClick={toggleMute}
+              className="text-[#71717a] hover:text-[#e4e4e7] transition-colors cursor-pointer"
+              aria-label={muted ? 'Unmute' : 'Mute'}
+            >
+              {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+            </button>
             {hasMoments && (
               <button
                 onClick={() => setMomentsVisible((v) => !v)}
@@ -219,13 +229,6 @@ export const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
               </button>
             )}
             <button
-              onClick={toggleMute}
-              className="text-[#71717a] hover:text-[#e4e4e7] transition-colors cursor-pointer"
-              aria-label={muted ? 'Unmute' : 'Mute'}
-            >
-              {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-            </button>
-            <button
               onClick={toggleFullscreen}
               className="text-[#71717a] hover:text-[#e4e4e7] transition-colors cursor-pointer"
               aria-label="Toggle fullscreen"
@@ -234,6 +237,16 @@ export const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
             </button>
           </div>
         </div>
+
+        {/* Moment context drawer */}
+        {openContextIndex !== null && (
+          <MomentContext
+            assetId={asset.id}
+            momentIndex={openContextIndex}
+            isOpen={true}
+            onClose={() => setOpenContextIndex(null)}
+          />
+        )}
       </div>
     );
   }
