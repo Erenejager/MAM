@@ -36,6 +36,7 @@ export interface WindowScore {
   windowEnd: number;
   transcriptScore: number;
   matchedKeyword: string | null;
+  keywordTimestamp: number | null;  // word-level timestamp from Whisper segment
   transcriptText: string;
 }
 
@@ -54,16 +55,22 @@ export function scoreTranscript(
     const overlapping = segments.filter(
       (s) => s.end > windowStart && s.start < windowEnd,
     );
-    const combinedText = overlapping.map((s) => s.text).join(' ').toLowerCase();
-    const words = combinedText.split(/\s+/);
 
     let matchedKeyword: string | null = null;
-    for (const word of words) {
-      const clean = word.replace(/^[^a-z]+|[^a-z]+$/g, '');
-      if (ACTION_KEYWORDS.has(clean)) {
-        matchedKeyword = clean;
-        break;
+    let keywordTimestamp: number | null = null;
+
+    // Check each segment individually to preserve word-level timestamp
+    for (const seg of overlapping) {
+      const words = seg.text.toLowerCase().split(/\s+/);
+      for (const word of words) {
+        const clean = word.replace(/^[^a-z]+|[^a-z]+$/g, '');
+        if (ACTION_KEYWORDS.has(clean)) {
+          matchedKeyword = clean;
+          keywordTimestamp = seg.start;
+          break;
+        }
       }
+      if (matchedKeyword) break;
     }
 
     results.push({
@@ -71,6 +78,7 @@ export function scoreTranscript(
       windowEnd,
       transcriptScore: matchedKeyword ? 1 : 0,
       matchedKeyword,
+      keywordTimestamp,
       transcriptText: overlapping.map((s) => s.text).join(' ').trim(),
     });
   }
