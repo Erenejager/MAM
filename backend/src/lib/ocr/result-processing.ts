@@ -4,7 +4,15 @@ import type { VisionResult } from './vision-api.js';
 export interface KeyMoment {
   timestamp: number;
   label: string;
-  score: string | null;
+  score_display: string | null;
+  sets: [number, number][] | null;
+  game_score: string | null;
+  serving: string | null;
+  moment_type: string | null;
+  score_source: 'visible' | 'interpolated' | null;
+  score_confidence: 'high' | 'low' | 'none';
+  score_changed: boolean | null;
+  frame_type: string | null;
   set_period: string | null;
   game_time: string | null;
   transcript: string;
@@ -28,7 +36,7 @@ export function processResults(results: VisionResult[]): OcrOutput {
   }
 
   const valid = results.filter(
-    (r) => r.sport || r.score || r.players.length > 0 || r.event,
+    (r) => r.sport || r.consensus || r.players.length > 0 || r.event,
   );
 
   if (valid.length === 0) {
@@ -61,21 +69,17 @@ export function processResults(results: VisionResult[]): OcrOutput {
     : valid;
 
   const sorted = [...consistent].sort((a, b) => a.timestamp - b.timestamp);
-  const chronoValid = validateChronology(sorted);
 
-  // Filter out routine and filler moments — keep only critical + significant
-  // If no importance was classified, keep it (backward compat with old results)
-  const meaningful = chronoValid.filter(
+  // Filter out routine and filler moments
+  const meaningful = sorted.filter(
     (r) => !r.importance || r.importance === 'critical' || r.importance === 'significant',
   );
 
-  // Filter out slow-mo replays — all overlay fields are N/A when no scoreboard is visible
+  // Filter out replays — use score_changed + frame_type for reliable detection
   const noReplays = meaningful.filter((r) => {
-    const isReplay =
-      r.score?.toLowerCase() === 'n/a' &&
-      r.set_period?.toLowerCase() === 'n/a' &&
-      r.game_time?.toLowerCase() === 'n/a';
-    if (isReplay) console.log(`[ocr] Filtered replay at ${Math.floor(r.timestamp / 60)}:${String(Math.floor(r.timestamp % 60)).padStart(2, '0')}`);
+    const isReplay = r.frame_type === 'replay' ||
+      (r.score_changed === false && r.frame_type !== 'live_play');
+    if (isReplay) console.log(`[ocr] Filtered replay at ${fmtTimestamp(r.timestamp)}`);
     return !isReplay;
   });
 
@@ -84,10 +88,20 @@ export function processResults(results: VisionResult[]): OcrOutput {
     const label = r.event ?? r.matchedKeyword ?? null;
     if (!label) continue;
 
+    const cs = r.consensus;
+
     keyMoments.push({
       timestamp: r.timestamp,
       label: capitalizeFirst(label),
-      score: r.score,
+      score_display: cs?.sets ? buildScoreDisplay(cs.sets, cs.game_score) : null,
+      sets: cs?.sets ?? null,
+      game_score: cs?.game_score ?? null,
+      serving: cs?.serving ?? null,
+      moment_type: null,
+      score_source: cs?.sets ? 'visible' : null,
+      score_confidence: r.score_confidence,
+      score_changed: r.score_changed,
+      frame_type: r.frame_type ?? null,
       set_period: r.set_period,
       game_time: r.game_time,
       transcript: r.transcriptText,
@@ -116,13 +130,6 @@ function mostFrequent(values: string[]): string | null {
   return values.find((v) => v.toLowerCase().trim() === best) ?? null;
 }
 
-function validateChronology(sorted: VisionResult[]): VisionResult[] {
-  // For MVP, keep all chronologically sorted moments.
-  // Score progression validation is too fragile across sports
-  // (tennis scores reset per game, football extra time, etc.)
-  return sorted;
-}
-
 function capitalizeFirst(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
@@ -136,19 +143,47 @@ export async function curateKeyMoments(output: OcrOutput): Promise<OcrOutput> {
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
+  const isTennis = output.sport?.toLowerCase() === 'tennis';
+
   const momentsList = output.keyMoments.map((m, i) => {
-    const time = `${Math.floor(m.timestamp / 60)}:${String(Math.floor(m.timestamp % 60)).padStart(2, '0')}`;
-    const prevScore = i > 0 ? output.keyMoments[i - 1].score : null;
-    const scoreChanged = prevScore && m.score && prevScore !== m.score;
-    const scorePart = m.score
-      ? scoreChanged
-        ? ` | Score: ${prevScore} → ${m.score}`
-        : ` | Score: ${m.score} (unchanged)`
+    const time = fmtTimestamp(m.timestamp);
+    const scorePart = m.score_display
+      ? m.score_changed
+        ? ` | Score: ${m.score_display} [CHANGED]`
+        : ` | Score: ${m.score_display} [unchanged]`
       : '';
-    return `[${time}] ${m.label}${scorePart}${m.set_period ? ` | ${m.set_period}` : ''}`;
+    return `[#${i} ${time}] ${m.label}${scorePart}${m.set_period ? ` | ${m.set_period}` : ''}`;
   }).join('\n');
 
-  const prompt = `You are curating a highlight timeline for a ${output.sport ?? 'sports'} match.
+  const tennisPrompt = `You are curating a highlight timeline for a Tennis match.
+${output.players.length > 0 ? `Players: ${output.players.join(' vs ')}` : ''}
+${output.competition ? `Competition: ${output.competition}` : ''}
+
+Here are ${output.keyMoments.length} candidate moments:
+
+${momentsList}
+
+YOUR JOB:
+1. Remove duplicates and near-duplicates (same event described differently, moments <30s apart covering the same thing)
+2. Remove moments that are NOT fan-worthy — routine holds, generic "match in progress", replays
+3. Moments where the score is UNCHANGED are less likely to be important — scrutinize harder
+4. KEEP: break of serve, set/match won, break points, match points, spectacular rallies, momentum shifts
+5. Rewrite labels to be SHORT (max 10-12 words). Include WHO did WHAT.
+   - BAD: "Carlos Alcaraz wins a crucial point, bringing the score to Deuce"
+   - GOOD: "Alcaraz saves break point, back to deuce"
+6. Aim for 10-20 moments for a full match
+
+IMPORTANT: Do NOT return any score fields. Scores are already locked from frame analysis.
+
+MOMENT TYPES — classify each moment with exactly one:
+break_of_serve, set_won, match_won, break_point, break_point_saved, ace, match_point, rally, hold, deuce, tiebreak, challenge, injury_timeout, double_fault
+
+Return JSON array only — no markdown, no explanation:
+[
+  { "index": 0, "label": "short label", "moment_type": "break_of_serve" }
+]`;
+
+  const genericPrompt = `You are curating a highlight timeline for a ${output.sport ?? 'sports'} match.
 ${output.players.length > 0 ? `Players: ${output.players.join(' vs ')}` : ''}
 ${output.competition ? `Competition: ${output.competition}` : ''}
 
@@ -158,21 +193,22 @@ ${momentsList}
 
 YOUR JOB:
 1. Remove duplicates and near-duplicates (same event described differently, moments seconds apart covering the same thing)
-2. Remove moments that are NOT fan-worthy — routine holds, generic "match in progress", replays of non-critical moments
-3. Moments where the score is UNCHANGED are less likely to be important — scrutinize them harder. They may be replays, celebrations, or non-scoring events. Don't auto-remove them (a spectacular rally that doesn't change the score IS worth keeping) but raise the bar.
-4. KEEP: decisive moments (set/match won, break of serve, goals, turning points), spectacular plays, momentum shifts, match conclusion
-5. For each kept moment, rewrite the label to be SHORT (max 10-12 words) but specific. Include WHO did WHAT.
-   - BAD: "Carlos Alcaraz wins a crucial point, bringing the score from Advantage Djokovic to Deuce"
+2. Remove moments that are NOT fan-worthy — routine plays, replays of non-critical moments
+3. Moments where the score is UNCHANGED are less likely to be important — scrutinize them harder
+4. KEEP: decisive moments, spectacular plays, momentum shifts, match conclusion
+5. Rewrite labels to be SHORT (max 10-12 words). Include WHO did WHAT.
+   - BAD: "Carlos Alcaraz wins a crucial point"
    - GOOD: "Alcaraz saves break point, back to deuce"
-   - BAD: "Novak Djokovic wins the match against Carlos Alcaraz"
-   - GOOD: "Djokovic wins match 6-3, 6-2"
-6. Keep the score and set_period from the original if available
-7. Aim for 10-20 moments for a full match, fewer for shorter content
+6. Aim for 10-20 moments for a full match, fewer for shorter content
+
+IMPORTANT: Do NOT return any score fields. Scores are already locked from frame analysis.
 
 Return JSON array only — no markdown, no explanation:
 [
-  { "timestamp_str": "M:SS", "label": "short label", "score": "score or null", "set_period": "period or null" }
+  { "index": 0, "label": "short label" }
 ]`;
+
+  const prompt = isTennis ? tennisPrompt : genericPrompt;
 
   try {
     let response;
@@ -193,40 +229,56 @@ Return JSON array only — no markdown, no explanation:
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) return output;
 
-    const curated = JSON.parse(jsonMatch[0]) as Array<{
-      timestamp_str: string;
-      label: string;
-      score: string | null;
-      set_period: string | null;
-    }>;
+    const curated = JSON.parse(jsonMatch[0]) as Array<Record<string, unknown>>;
 
     if (!Array.isArray(curated) || curated.length === 0) return output;
 
-    // Map curated labels back to original moments by matching timestamps
+    // Match curated entries back to originals by index
     const curatedMoments: KeyMoment[] = [];
     for (const c of curated) {
-      const parts = c.timestamp_str.split(':').map(Number);
-      const targetSec = (parts[0] ?? 0) * 60 + (parts[1] ?? 0);
+      const index = typeof c.index === 'number' ? c.index : -1;
+      const original = index >= 0 && index < output.keyMoments.length
+        ? output.keyMoments[index]
+        : null;
 
-      // Find closest original moment within 30s
-      let best: KeyMoment | null = null;
-      let bestDist = 30;
-      for (const m of output.keyMoments) {
-        const dist = Math.abs(m.timestamp - targetSec);
-        if (dist < bestDist) {
-          bestDist = dist;
-          best = m;
+      if (!original) {
+        // Fallback: try timestamp matching if index is missing
+        const parts = String(c.timestamp_str ?? '').split(':').map(Number);
+        const targetSec = (parts[0] ?? 0) * 60 + (parts[1] ?? 0);
+        let best: KeyMoment | null = null;
+        let bestDist = 30;
+        for (const m of output.keyMoments) {
+          const dist = Math.abs(m.timestamp - targetSec);
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = m;
+          }
         }
-      }
-
-      if (best) {
+        if (!best) continue;
         curatedMoments.push({
           ...best,
-          label: c.label,
-          score: c.score ?? best.score,
-          set_period: c.set_period ?? best.set_period,
+          label: String(c.label),
+          moment_type: typeof c.moment_type === 'string' ? c.moment_type : null,
         });
+        continue;
       }
+
+      curatedMoments.push({
+        ...original,
+        label: String(c.label),
+        moment_type: typeof c.moment_type === 'string' ? c.moment_type : null,
+      });
+    }
+
+    // Sort chronologically
+    curatedMoments.sort((a, b) => a.timestamp - b.timestamp);
+
+    // Tennis post-processing
+    if (isTennis) {
+      validateScoreProgression(curatedMoments);
+      interpolateScores(curatedMoments);
+      deriveSetPeriods(curatedMoments);
+      fixMomentTypeOrder(curatedMoments);
     }
 
     console.log(`[ocr] Curated: ${output.keyMoments.length} → ${curatedMoments.length} moments`);
@@ -234,5 +286,159 @@ Return JSON array only — no markdown, no explanation:
   } catch (err) {
     console.error('[ocr] Curation pass failed, using uncurated results:', err);
     return output;
+  }
+}
+
+// ─── Tennis score helpers ────────────────────────────────────────────────────
+
+function totalGames(sets: [number, number][]): number {
+  return sets.reduce((sum, [a, b]) => sum + a + b, 0);
+}
+
+/**
+ * Validate score progression — tennis scores must move forward.
+ * When a score is impossible given the surrounding context, null it out
+ * so it won't be displayed (better no score than a wrong score).
+ *
+ * Rules:
+ * - Total games played can only increase or stay the same chronologically
+ * - A single set can't exceed 13 games (7-6 tiebreak)
+ * - Number of sets can't decrease
+ * - Completed sets (all sets except the last) must stay consistent once established
+ */
+function validateScoreProgression(moments: KeyMoment[]): void {
+  let prevSets: [number, number][] | null = null;
+  let prevTotal = 0;
+
+  for (const m of moments) {
+    if (!m.sets) continue;
+
+    // Rule: no set can have more than 13 games
+    const invalidSet = m.sets.some(([a, b]) => a + b > 13 || a < 0 || b < 0);
+    if (invalidSet) {
+      console.log(`[ocr] Score validation: impossible set score at ${fmtTimestamp(m.timestamp)} — ${JSON.stringify(m.sets)}, nulling`);
+      nullScore(m);
+      continue;
+    }
+
+    const currTotal = totalGames(m.sets);
+
+    if (prevSets) {
+      // Rule: can't go back to fewer sets
+      if (m.sets.length < prevSets.length) {
+        console.log(`[ocr] Score validation: set count decreased at ${fmtTimestamp(m.timestamp)} (${prevSets.length} → ${m.sets.length}), nulling`);
+        nullScore(m);
+        continue;
+      }
+
+      // Rule: completed sets must stay consistent
+      // Compare all sets except the current (last) one with previous completed sets
+      const completedNow = m.sets.slice(0, -1);
+      const completedPrev = prevSets.slice(0, Math.min(prevSets.length - 1, completedNow.length));
+      let completedMismatch = false;
+      for (let i = 0; i < completedPrev.length; i++) {
+        if (completedNow[i] && (completedNow[i][0] !== completedPrev[i][0] || completedNow[i][1] !== completedPrev[i][1])) {
+          completedMismatch = true;
+          break;
+        }
+      }
+      if (completedMismatch) {
+        console.log(`[ocr] Score validation: completed set mismatch at ${fmtTimestamp(m.timestamp)} — prev: ${JSON.stringify(prevSets)}, curr: ${JSON.stringify(m.sets)}, nulling`);
+        nullScore(m);
+        continue;
+      }
+
+      // Rule: total games can't decrease (with tolerance for set transitions)
+      // When a new set starts, total stays the same or increases
+      if (currTotal < prevTotal - 1) {
+        console.log(`[ocr] Score validation: total games decreased at ${fmtTimestamp(m.timestamp)} (${prevTotal} → ${currTotal}), nulling`);
+        nullScore(m);
+        continue;
+      }
+    }
+
+    // This score passed validation — becomes the new anchor
+    prevSets = m.sets;
+    prevTotal = currTotal;
+  }
+}
+
+function nullScore(m: KeyMoment): void {
+  m.sets = null;
+  m.score_display = null;
+  m.score_source = null;
+}
+
+function fmtTimestamp(s: number): string {
+  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+}
+
+/** Build deterministic score_display from structured sets + game_score */
+function buildScoreDisplay(sets: [number, number][], gameScore: string | null): string {
+  const setStrs = sets.map(([p1, p2]) => `${p1}-${p2}`);
+  const setsStr = setStrs.join(', ');
+  if (gameScore) {
+    return `${setsStr} (${gameScore})`;
+  }
+  return setsStr;
+}
+
+/** Mark moments without visible scores as interpolated — but don't fake a score_display */
+function interpolateScores(moments: KeyMoment[]): void {
+  for (const m of moments) {
+    if (!m.sets) {
+      m.score_source = 'interpolated';
+      m.score_display = null; // don't show a score we're not confident about
+    }
+  }
+}
+
+/** Derive set_period from sets array length instead of trusting Gemini's text */
+function deriveSetPeriods(moments: KeyMoment[]): void {
+  for (const m of moments) {
+    if (!m.sets) continue;
+    m.set_period = `Set ${m.sets.length}`;
+  }
+}
+
+/**
+ * Fix logical ordering issues with moment types:
+ * - Only one match_won allowed — the last one chronologically
+ * - Earlier match_won instances are downgraded to match_point (likely replays)
+ * - Validate set_won count against actual completed sets in score data
+ */
+function fixMomentTypeOrder(moments: KeyMoment[]): void {
+  // Only one match_won — the last chronologically
+  let lastMatchWonIdx = -1;
+  for (let i = moments.length - 1; i >= 0; i--) {
+    if (moments[i].moment_type === 'match_won') {
+      lastMatchWonIdx = i;
+      break;
+    }
+  }
+  if (lastMatchWonIdx >= 0) {
+    for (let i = 0; i < lastMatchWonIdx; i++) {
+      if (moments[i].moment_type === 'match_won') {
+        console.log(`[ocr] Downgraded premature match_won at index ${i} to match_point`);
+        moments[i].moment_type = 'match_point';
+      }
+    }
+  }
+
+  // Validate set_won count against actual completed sets in score data
+  let maxCompletedSets = 0;
+  let setWonCount = 0;
+  for (const m of moments) {
+    if (m.sets && m.sets.length > 1) {
+      const completedSets = m.sets.length - 1;
+      maxCompletedSets = Math.max(maxCompletedSets, completedSets);
+    }
+    if (m.moment_type === 'set_won') {
+      setWonCount++;
+      if (setWonCount > maxCompletedSets) {
+        console.log(`[ocr] Downgraded excess set_won at ${fmtTimestamp(m.timestamp)} to rally (${setWonCount} set_won but only ${maxCompletedSets} completed sets)`);
+        m.moment_type = 'rally';
+      }
+    }
   }
 }
