@@ -44,7 +44,7 @@ export async function runOcrPipeline(
     // Pass 2: Full analysis with context + 3 frames per peak
     const visionResults = await analyzeWithScores(refinedPeaks, matchCtx, videoPath);
 
-    const rawOutput = processResults(visionResults);
+    const rawOutput = processResults(visionResults, matchCtx);
 
     // Pass 3: LLM curation — deduplicate, filter, shorten labels
     const output = await curateKeyMoments(rawOutput);

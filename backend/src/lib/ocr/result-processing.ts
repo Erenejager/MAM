@@ -30,45 +30,29 @@ export interface OcrOutput {
   enriched?: boolean;
 }
 
-export function processResults(results: VisionResult[]): OcrOutput {
+export function processResults(
+  results: VisionResult[],
+  matchCtx?: { sport: string | null; players: string[]; competition: string | null },
+): OcrOutput {
+  // Use matchCtx as authoritative source for sport/players/competition
+  // (identifyMatch is the dedicated pass for this; analyzeWithScores doesn't return them)
+  const sport = matchCtx?.sport ?? null;
+  const competition = matchCtx?.competition ?? null;
+  const confirmedPlayers = matchCtx?.players ?? [];
+
   if (results.length === 0) {
-    return { sport: null, competition: null, players: [], keyMoments: [] };
+    return { sport, competition, players: confirmedPlayers, keyMoments: [] };
   }
 
   const valid = results.filter(
-    (r) => r.sport || r.consensus || r.players.length > 0 || r.event,
+    (r) => r.consensus || r.event,
   );
 
   if (valid.length === 0) {
-    return { sport: null, competition: null, players: [], keyMoments: [] };
+    return { sport, competition, players: confirmedPlayers, keyMoments: [] };
   }
 
-  const sport = mostFrequent(valid.map((r) => r.sport).filter(Boolean) as string[]);
-  const competition = mostFrequent(
-    valid.map((r) => r.competition).filter(Boolean) as string[],
-  );
-
-  const playerCounts = new Map<string, { count: number; original: string }>();
-  for (const r of valid) {
-    for (const p of r.players) {
-      const key = p.toLowerCase().trim();
-      const existing = playerCounts.get(key);
-      if (existing) {
-        existing.count++;
-      } else {
-        playerCounts.set(key, { count: 1, original: p });
-      }
-    }
-  }
-  const confirmedPlayers = [...playerCounts.values()]
-    .filter((p) => p.count >= 3 || valid.length < 5)
-    .map((p) => p.original);
-
-  const consistent = sport
-    ? valid.filter((r) => !r.sport || r.sport.toLowerCase() === sport.toLowerCase())
-    : valid;
-
-  const sorted = [...consistent].sort((a, b) => a.timestamp - b.timestamp);
+  const sorted = [...valid].sort((a, b) => a.timestamp - b.timestamp);
 
   // Filter out routine and filler moments
   const meaningful = sorted.filter(
@@ -112,23 +96,6 @@ export function processResults(results: VisionResult[]): OcrOutput {
   return { sport, competition, players: confirmedPlayers, keyMoments };
 }
 
-function mostFrequent(values: string[]): string | null {
-  if (values.length === 0) return null;
-  const counts = new Map<string, number>();
-  for (const v of values) {
-    const key = v.toLowerCase().trim();
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  let best = '';
-  let bestCount = 0;
-  for (const [key, count] of counts) {
-    if (count > bestCount) {
-      best = key;
-      bestCount = count;
-    }
-  }
-  return values.find((v) => v.toLowerCase().trim() === best) ?? null;
-}
 
 function capitalizeFirst(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -277,8 +244,6 @@ Return JSON array only — no markdown, no explanation:
     if (isTennis) {
       validateScoreProgression(curatedMoments);
       interpolateScores(curatedMoments);
-      deriveSetPeriods(curatedMoments);
-      fixMomentTypeOrder(curatedMoments);
     }
 
     console.log(`[ocr] Curated: ${output.keyMoments.length} → ${curatedMoments.length} moments`);
@@ -393,52 +358,3 @@ function interpolateScores(moments: KeyMoment[]): void {
   }
 }
 
-/** Derive set_period from sets array length instead of trusting Gemini's text */
-function deriveSetPeriods(moments: KeyMoment[]): void {
-  for (const m of moments) {
-    if (!m.sets) continue;
-    m.set_period = `Set ${m.sets.length}`;
-  }
-}
-
-/**
- * Fix logical ordering issues with moment types:
- * - Only one match_won allowed — the last one chronologically
- * - Earlier match_won instances are downgraded to match_point (likely replays)
- * - Validate set_won count against actual completed sets in score data
- */
-function fixMomentTypeOrder(moments: KeyMoment[]): void {
-  // Only one match_won — the last chronologically
-  let lastMatchWonIdx = -1;
-  for (let i = moments.length - 1; i >= 0; i--) {
-    if (moments[i].moment_type === 'match_won') {
-      lastMatchWonIdx = i;
-      break;
-    }
-  }
-  if (lastMatchWonIdx >= 0) {
-    for (let i = 0; i < lastMatchWonIdx; i++) {
-      if (moments[i].moment_type === 'match_won') {
-        console.log(`[ocr] Downgraded premature match_won at index ${i} to match_point`);
-        moments[i].moment_type = 'match_point';
-      }
-    }
-  }
-
-  // Validate set_won count against actual completed sets in score data
-  let maxCompletedSets = 0;
-  let setWonCount = 0;
-  for (const m of moments) {
-    if (m.sets && m.sets.length > 1) {
-      const completedSets = m.sets.length - 1;
-      maxCompletedSets = Math.max(maxCompletedSets, completedSets);
-    }
-    if (m.moment_type === 'set_won') {
-      setWonCount++;
-      if (setWonCount > maxCompletedSets) {
-        console.log(`[ocr] Downgraded excess set_won at ${fmtTimestamp(m.timestamp)} to rally (${setWonCount} set_won but only ${maxCompletedSets} completed sets)`);
-        m.moment_type = 'rally';
-      }
-    }
-  }
-}
