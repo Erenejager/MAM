@@ -1,16 +1,40 @@
 import { useState, useEffect } from 'react';
-import { Clock, Trophy, Users } from 'lucide-react';
+import { Trophy, Users } from 'lucide-react';
 import type { Asset } from '../../types/asset';
 
 interface KeyMoment {
   timestamp: number;
   label: string;
-  score: string | null;
+  score_display: string | null;
+  sets: [number, number][] | null;
+  game_score: string | null;
+  serving: string | null;
+  moment_type: string | null;
+  score_source: 'visible' | 'interpolated' | null;
+  score_confidence: 'high' | 'low' | 'none';
+  score_changed: boolean | null;
   set_period: string | null;
   game_time: string | null;
   transcript: string;
   audio_energy: number;
 }
+
+const MOMENT_TYPE_LABELS: Record<string, { label: string; critical: boolean }> = {
+  match_won: { label: 'MATCH WON', critical: true },
+  set_won: { label: 'SET WON', critical: true },
+  match_point: { label: 'MATCH PT', critical: true },
+  break_of_serve: { label: 'BREAK', critical: true },
+  break_point: { label: 'BREAK PT', critical: false },
+  break_point_saved: { label: 'BP SAVED', critical: false },
+  ace: { label: 'ACE', critical: false },
+  double_fault: { label: 'DBL FAULT', critical: false },
+  tiebreak: { label: 'TIEBREAK', critical: true },
+  rally: { label: 'RALLY', critical: false },
+  hold: { label: 'HOLD', critical: false },
+  deuce: { label: 'DEUCE', critical: false },
+  challenge: { label: 'CHALLENGE', critical: false },
+  injury_timeout: { label: 'TIMEOUT', critical: false },
+};
 
 interface KeyMomentsListProps {
   asset: Asset;
@@ -106,16 +130,26 @@ export function KeyMomentsList({ asset, videoRef }: KeyMomentsListProps) {
               {formatTimecode(moment.timestamp)}
             </span>
             <div className="flex-1 min-w-0">
-              <div className="text-xs text-text font-semibold truncate">
-                {moment.label}
+              <div className="flex items-center gap-sm">
+                <span className="text-xs text-text font-semibold truncate flex-1">
+                  {moment.label}
+                </span>
+                {moment.moment_type && MOMENT_TYPE_LABELS[moment.moment_type] && (
+                  <span className={`shrink-0 text-[9px] font-semibold px-[5px] py-[1px] rounded ${
+                    MOMENT_TYPE_LABELS[moment.moment_type].critical
+                      ? 'bg-cta/20 text-cta'
+                      : 'bg-glass-hover text-text-muted'
+                  }`}>
+                    {MOMENT_TYPE_LABELS[moment.moment_type].label}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-sm text-[10px] text-text-muted">
-                {moment.score && <span>{moment.score}</span>}
-                {moment.set_period && <span>· {moment.set_period}</span>}
-                {moment.game_time && (
+                {moment.set_period && <span>{moment.set_period}</span>}
+                {moment.score_display && moment.score_confidence === 'high' && (
                   <span className="flex items-center gap-[2px]">
-                    <Clock size={9} className="opacity-50" />
-                    {moment.game_time}
+                    <span className="text-cta opacity-60" title="Score read from screen">●</span>
+                    {moment.score_display}
                   </span>
                 )}
               </div>

@@ -252,9 +252,9 @@ export function VideoProgressBar({ videoRef, moments = [], onMomentContextToggle
               {moments[hoveredMomentIdx].label}
             </span>
           </div>
-          {(moments[hoveredMomentIdx].score || moments[hoveredMomentIdx].set_period) && (
+          {(moments[hoveredMomentIdx].score_display || moments[hoveredMomentIdx].set_period) && (
             <div className="text-[10px] text-[#a1a1aa] mt-[1px]">
-              {[moments[hoveredMomentIdx].score, moments[hoveredMomentIdx].set_period]
+              {[moments[hoveredMomentIdx].score_display, moments[hoveredMomentIdx].set_period]
                 .filter(Boolean)
                 .join(' | ')}
             </div>
@@ -304,9 +304,9 @@ export function VideoProgressBar({ videoRef, moments = [], onMomentContextToggle
               </button>
             )}
           </div>
-          {(moments[floatingCard.index].score || moments[floatingCard.index].set_period) && (
+          {(moments[floatingCard.index].score_display || moments[floatingCard.index].set_period) && (
             <div className="text-[10px] text-[#a1a1aa] mt-[1px]">
-              {[moments[floatingCard.index].score, moments[floatingCard.index].set_period]
+              {[moments[floatingCard.index].score_display, moments[floatingCard.index].set_period]
                 .filter(Boolean)
                 .join(' | ')}
             </div>

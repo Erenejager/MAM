@@ -9,14 +9,14 @@ import { MomentContext } from './MomentContext';
 export interface TimelineMoment {
   timestamp: number;
   label: string;
-  score: string | null;
+  score_display: string | null;
   set_period: string | null;
   position: number;
   count: number;
 }
 
 function mergeMoments(
-  raw: Array<{ timestamp: number; label: string; score: string | null; set_period: string | null }>,
+  raw: Array<{ timestamp: number; label: string; score_display: string | null; set_period: string | null }>,
   duration: number,
 ): TimelineMoment[] {
   if (!duration || duration <= 0) return [];
