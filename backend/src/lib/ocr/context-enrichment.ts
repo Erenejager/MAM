@@ -70,13 +70,12 @@ export async function enrichMoments(input: EnrichmentInput): Promise<void> {
     );
 
     // 4. Context JSON
-    const prevScore = i > 0 ? moments[i - 1].score : null;
-    const currentScore = moment.score;
-    const scoreChanged = prevScore !== null && currentScore !== null && prevScore !== currentScore;
+    const prevScoreDisplay = i > 0 ? moments[i - 1].score_display : null;
+    const currentScoreDisplay = moment.score_display;
 
     const context: MomentContext = {
       label: moment.label,
-      score: currentScore,
+      score: currentScoreDisplay,
       set_period: moment.set_period,
       game_time: moment.game_time,
       sport,
@@ -84,9 +83,9 @@ export async function enrichMoments(input: EnrichmentInput): Promise<void> {
       peakTime,
       suggestedStartTime: moment.startTime,
       suggestedEndTime: moment.endTime,
-      scoreBefore: prevScore,
-      scoreAfter: currentScore,
-      scoreChanged,
+      scoreBefore: prevScoreDisplay,
+      scoreAfter: currentScoreDisplay,
+      scoreChanged: moment.score_changed ?? false,
       audioEnergy: moment.audio_energy,
       momentIndex: i,
     };
