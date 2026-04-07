@@ -1,8 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { enrichMoments, type EnrichmentInput } from '../lib/ocr/context-enrichment.js';
+import type { KeyMoment } from '../lib/ocr/result-processing.js';
 import { mkdir, readFile, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+
+/** Build a KeyMoment with sensible defaults for test fixtures */
+function mkMoment(overrides: Partial<KeyMoment> & Pick<KeyMoment, 'timestamp' | 'label'>): KeyMoment {
+  return {
+    score_display: null, sets: null, game_score: null,
+    serving: null, moment_type: null, score_source: null, score_confidence: 'none' as const,
+    score_changed: null, frame_type: null, set_period: null, game_time: null,
+    transcript: '', audio_energy: 0.5, ...overrides,
+  };
+}
 
 // Mock ffmpeg and audio energy since we can't run ffmpeg in unit tests
 vi.mock('../lib/ocr/audio-peaks.js', () => ({
@@ -32,18 +43,11 @@ describe('enrichMoments', () => {
       assetDir: testDir,
       durationSeconds: 600,
       moments: [
-        {
-          timestamp: 120,
-          label: 'Break of serve',
-          score: '3-2',
-          set_period: 'Set 1',
-          game_time: null,
-          transcript: 'What a shot',
-          audio_energy: 0.8,
-          startTime: 110,
-          endTime: 130,
-          peakTime: 120,
-        },
+        mkMoment({
+          timestamp: 120, label: 'Break of serve', score_display: '3-2', score_changed: true,
+          set_period: 'Set 1', transcript: 'What a shot', audio_energy: 0.8,
+          startTime: 110, endTime: 130, peakTime: 120,
+        }),
       ],
       transcriptSegments: [
         { start: 115, end: 118, text: 'incredible shot down the line' },
@@ -72,18 +76,11 @@ describe('enrichMoments', () => {
       assetDir: testDir,
       durationSeconds: 600,
       moments: [
-        {
-          timestamp: 300,
-          label: 'Goal',
-          score: '1-0',
-          set_period: 'First Half',
-          game_time: '32:00',
-          transcript: 'Goal!',
-          audio_energy: 0.95,
-          startTime: 290,
-          endTime: 310,
-          peakTime: 300,
-        },
+        mkMoment({
+          timestamp: 300, label: 'Goal', score_display: '1-0', score_changed: true,
+          set_period: 'First Half', game_time: '32:00', transcript: 'Goal!',
+          audio_energy: 0.95, startTime: 290, endTime: 310, peakTime: 300,
+        }),
       ],
       transcriptSegments: [
         { start: 100, end: 105, text: 'far away segment' },
@@ -113,21 +110,18 @@ describe('enrichMoments', () => {
       assetDir: testDir,
       durationSeconds: 600,
       moments: [
-        {
-          timestamp: 100, label: 'Point 1', score: '15-0', set_period: 'Set 1',
-          game_time: null, transcript: '', audio_energy: 0.5,
+        mkMoment({
+          timestamp: 100, label: 'Point 1', score_display: '15-0', score_changed: null, set_period: 'Set 1',
           startTime: 90, endTime: 110, peakTime: 100,
-        },
-        {
-          timestamp: 200, label: 'Point 2', score: '30-0', set_period: 'Set 1',
-          game_time: null, transcript: '', audio_energy: 0.6,
-          startTime: 190, endTime: 210, peakTime: 200,
-        },
-        {
-          timestamp: 300, label: 'Point 3', score: '30-0', set_period: 'Set 1',
-          game_time: null, transcript: '', audio_energy: 0.4,
-          startTime: 290, endTime: 310, peakTime: 300,
-        },
+        }),
+        mkMoment({
+          timestamp: 200, label: 'Point 2', score_display: '30-0', score_changed: true, set_period: 'Set 1',
+          audio_energy: 0.6, startTime: 190, endTime: 210, peakTime: 200,
+        }),
+        mkMoment({
+          timestamp: 300, label: 'Point 3', score_display: '30-0', score_changed: false, set_period: 'Set 1',
+          audio_energy: 0.4, startTime: 290, endTime: 310, peakTime: 300,
+        }),
       ],
       transcriptSegments: [],
       sport: 'Tennis',
