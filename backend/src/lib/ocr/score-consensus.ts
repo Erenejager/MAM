@@ -30,10 +30,47 @@ export function parseOneFrameScore(raw: unknown): FrameScore | null {
   };
 }
 
-export function computeConsensus(_scores: FrameScore[]): FrameScore | null {
-  throw new Error('Not implemented');
+export interface ConsensusResult {
+  consensus: FrameScore | null;
+  score_confidence: 'high' | 'low' | 'none';
 }
 
-export function detectScoreDelta(_prev: FrameScore | null, _next: FrameScore | null): boolean {
-  throw new Error('Not implemented');
+function isReadable(fs: FrameScore | null): fs is FrameScore {
+  return fs !== null && fs.visible && fs.sets !== null;
+}
+
+export function computeConsensus(
+  frames: [FrameScore | null, FrameScore | null, FrameScore | null],
+): ConsensusResult {
+  const [before, during, after] = frames;
+  const readable = [before, during, after].filter(isReadable);
+
+  if (readable.length === 0) {
+    return { consensus: null, score_confidence: 'none' };
+  }
+
+  if (readable.length === 1) {
+    return { consensus: readable[0], score_confidence: 'low' };
+  }
+
+  // 2+ readable — prefer AFTER, then DURING, then BEFORE
+  const preferred = isReadable(after) ? after : isReadable(during) ? during : before;
+  return { consensus: preferred, score_confidence: 'high' };
+}
+
+function setsEqual(a: [number, number][] | null, b: [number, number][] | null): boolean {
+  if (a === null && b === null) return true;
+  if (a === null || b === null) return false;
+  if (a.length !== b.length) return false;
+  return a.every((set, i) => set[0] === b[i][0] && set[1] === b[i][1]);
+}
+
+export function detectScoreDelta(
+  before: FrameScore | null,
+  after: FrameScore | null,
+): boolean | null {
+  if (!isReadable(before) || !isReadable(after)) return null;
+  const setsChanged = !setsEqual(before.sets, after.sets);
+  const gameScoreChanged = before.game_score !== after.game_score;
+  return setsChanged || gameScoreChanged;
 }
