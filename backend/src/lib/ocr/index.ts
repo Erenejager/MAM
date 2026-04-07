@@ -4,7 +4,7 @@ import { scoreTranscript, type TranscriptSegment } from './transcript-scoring.js
 import { computeAudioEnergy } from './audio-peaks.js';
 import { detectPeaks } from './peak-detection.js';
 import { refinePeaks } from './overlay-diff.js';
-import { identifyMatch, analyzeFrames } from './vision-api.js';
+import { identifyMatch, analyzeWithScores } from './vision-api.js';
 import { processResults, curateKeyMoments, type OcrOutput } from './result-processing.js';
 import { findMomentBoundaries } from './moment-boundaries.js';
 import { enrichMoments } from './context-enrichment.js';
@@ -42,7 +42,7 @@ export async function runOcrPipeline(
     const matchCtx = await identifyMatch(refinedPeaks);
 
     // Pass 2: Full analysis with context + 3 frames per peak
-    const visionResults = await analyzeFrames(refinedPeaks, matchCtx);
+    const visionResults = await analyzeWithScores(refinedPeaks, matchCtx, videoPath);
 
     const rawOutput = processResults(visionResults);
 
