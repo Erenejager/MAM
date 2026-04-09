@@ -106,8 +106,9 @@ describe('processResults — importance propagation', () => {
 
   it('sets importance to null when VisionResult importance is null', () => {
     const result = processResults([
-      makeResult({ importance: null }),
+      makeResult({ importance: null, frame_type: 'live_play' }),
     ]);
+    expect(result.keyMoments).toHaveLength(1);
     expect(result.keyMoments[0].importance).toBeNull();
   });
 });
