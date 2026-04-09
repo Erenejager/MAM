@@ -10,7 +10,7 @@ function mkMoment(overrides: Partial<KeyMoment> & Pick<KeyMoment, 'timestamp' | 
   return {
     score_display: null, sets: null, game_score: null,
     serving: null, moment_type: null, score_source: null, score_confidence: 'none' as const,
-    score_changed: null, frame_type: null, set_period: null, game_time: null,
+    score_changed: null, frame_type: null, importance: null, set_period: null, game_time: null,
     transcript: '', audio_energy: 0.5, ...overrides,
   };
 }

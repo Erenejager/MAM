@@ -15,6 +15,7 @@ export interface KeyMoment {
   score_confidence: 'high' | 'low' | 'none';
   score_changed: boolean | null;
   frame_type: string | null;
+  importance: 'critical' | 'significant' | 'routine' | 'filler' | null;
   set_period: string | null;
   game_time: string | null;
   transcript: string;
@@ -98,15 +99,16 @@ export function processResults(
     keyMoments.push({
       timestamp: r.timestamp,
       label: capitalizeFirst(label),
-      score_display: cs?.sets ? buildScoreDisplay(cs.sets, cs.game_score) : null,
+      score_display: cs ? buildScoreDisplay(cs) : null,
       sets: cs?.sets ?? null,
       game_score: cs?.game_score ?? null,
       serving: cs?.serving ?? null,
       moment_type: null,
-      score_source: cs?.sets ? 'visible' : null,
+      score_source: (cs?.sets || cs?.score_text) ? 'visible' : null,
       score_confidence: r.score_confidence,
       score_changed: r.score_changed,
       frame_type: r.frame_type ?? null,
+      importance: r.importance ?? null,
       set_period: r.set_period,
       game_time: r.game_time,
       transcript: r.transcriptText,
@@ -359,14 +361,14 @@ function fmtTimestamp(s: number): string {
   return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 }
 
-/** Build deterministic score_display from structured sets + game_score */
-function buildScoreDisplay(sets: [number, number][], gameScore: string | null): string {
-  const setStrs = sets.map(([p1, p2]) => `${p1}-${p2}`);
-  const setsStr = setStrs.join(', ');
-  if (gameScore) {
-    return `${setsStr} (${gameScore})`;
+/** Build score_display from either structured sets (tennis) or raw score_text (other sports) */
+function buildScoreDisplay(cs: { sets: [number, number][] | null; game_score: string | null; score_text?: string | null }): string | null {
+  if (cs.sets) {
+    const setStrs = cs.sets.map(([p1, p2]) => `${p1}-${p2}`);
+    const setsStr = setStrs.join(', ');
+    return cs.game_score ? `${setsStr} (${cs.game_score})` : setsStr;
   }
-  return setsStr;
+  return cs.score_text ?? null;
 }
 
 /** Mark moments without visible scores as interpolated — but don't fake a score_display */

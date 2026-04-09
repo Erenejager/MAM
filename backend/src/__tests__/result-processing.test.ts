@@ -12,9 +12,6 @@ function makeResult(overrides: Partial<VisionResult>): VisionResult {
     consensus: null,
     score_changed: null,
     score_confidence: 'none',
-    sport: null,
-    players: [],
-    competition: null,
     frame_type: null,
     set_period: null,
     game_time: null,
@@ -96,5 +93,21 @@ describe('processResults — replay filter', () => {
       }),
     ]);
     expect(result.keyMoments).toHaveLength(0);
+  });
+});
+
+describe('processResults — importance propagation', () => {
+  it('carries importance from VisionResult through to KeyMoment', () => {
+    const result = processResults([
+      makeResult({ importance: 'critical', frame_type: 'live_play' }),
+    ]);
+    expect(result.keyMoments[0].importance).toBe('critical');
+  });
+
+  it('sets importance to null when VisionResult importance is null', () => {
+    const result = processResults([
+      makeResult({ importance: null }),
+    ]);
+    expect(result.keyMoments[0].importance).toBeNull();
   });
 });
