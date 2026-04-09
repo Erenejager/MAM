@@ -1,6 +1,8 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { VisionResult } from './vision-api.js';
 
+const REAL_MOMENT_FRAME_TYPES = new Set(['celebration', 'close_up', 'live_play']);
+
 export interface KeyMoment {
   timestamp: number;
   label: string;
@@ -60,7 +62,6 @@ export function processResults(
   );
 
   // Filter out replays — use a three-tier guard to avoid killing real moments
-  const REAL_MOMENT_FRAME_TYPES = new Set(['celebration', 'close_up', 'live_play']);
   const noReplays = meaningful.filter((r) => {
     // Tier 1: explicit replay — always filter
     if (r.frame_type === 'replay') {
