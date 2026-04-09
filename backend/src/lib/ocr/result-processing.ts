@@ -59,12 +59,32 @@ export function processResults(
     (r) => !r.importance || r.importance === 'critical' || r.importance === 'significant',
   );
 
-  // Filter out replays — use score_changed + frame_type for reliable detection
+  // Filter out replays — use a three-tier guard to avoid killing real moments
+  const REAL_MOMENT_FRAME_TYPES = new Set(['celebration', 'close_up', 'live_play']);
   const noReplays = meaningful.filter((r) => {
-    const isReplay = r.frame_type === 'replay' ||
-      (r.score_changed === false && r.frame_type !== 'live_play');
-    if (isReplay) console.log(`[ocr] Filtered replay at ${fmtTimestamp(r.timestamp)}`);
-    return !isReplay;
+    // Tier 1: explicit replay — always filter
+    if (r.frame_type === 'replay') {
+      console.log(`[ocr] Filtered explicit replay at ${fmtTimestamp(r.timestamp)}`);
+      return false;
+    }
+
+    // Tier 2: probable replay — only when all safety conditions pass:
+    // - score reading is definitively confirmed (high confidence = 2+ readable frames)
+    // - frame type is not a known real-moment type
+    // - importance was not elevated by Gemini
+    const isProbableReplay =
+      r.score_changed === false &&
+      r.score_confidence === 'high' &&
+      !REAL_MOMENT_FRAME_TYPES.has(r.frame_type ?? '') &&
+      r.importance !== 'critical' &&
+      r.importance !== 'significant';
+
+    if (isProbableReplay) {
+      console.log(`[ocr] Filtered probable replay at ${fmtTimestamp(r.timestamp)} (frame_type: ${r.frame_type}, confidence: ${r.score_confidence})`);
+      return false;
+    }
+
+    return true;
   });
 
   const keyMoments: KeyMoment[] = [];
