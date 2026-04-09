@@ -10,6 +10,8 @@ import type { FrameScore } from './score-consensus.js';
 
 const execFileAsync = promisify(execFile);
 
+const VISION_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+
 export interface VisionResult {
   timestamp: number;
   matchedKeyword: string | null;
@@ -140,30 +142,37 @@ async function extractFrame720p(videoPath: string, timeSeconds: number, outputPa
 }
 
 async function callGemini(
-  model: ReturnType<GoogleGenerativeAI['getGenerativeModel']>,
+  genAI: GoogleGenerativeAI,
   prompt: string,
   images: Array<{ mimeType: string; data: string }>,
 ): Promise<Record<string, unknown> | null> {
-  let response;
-  for (let attempt = 1; attempt <= 4; attempt++) {
-    try {
-      response = await model.generateContent([
-        prompt,
-        ...images.map((img) => ({ inlineData: img })),
-      ]);
-      break;
-    } catch (err: unknown) {
-      const is429 = err instanceof Error && err.message.includes('429');
-      if (!is429 || attempt === 4) throw err;
-      const delay = Math.pow(2, attempt) * 1000;
-      await new Promise((r) => setTimeout(r, delay));
+  for (const modelName of VISION_MODELS) {
+    const model = genAI.getGenerativeModel({ model: modelName });
+    let succeeded = false;
+    let response;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        response = await model.generateContent([
+          prompt,
+          ...images.map((img) => ({ inlineData: img })),
+        ]);
+        succeeded = true;
+        break;
+      } catch (err: unknown) {
+        const isRetryable = err instanceof Error && (err.message.includes('429') || err.message.includes('503'));
+        if (!isRetryable || attempt === 3) break;
+        const delay = Math.pow(2, attempt) * 1000;
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+    if (succeeded && response) {
+      const text = response.response.text();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return null;
+      return JSON.parse(jsonMatch[0]);
     }
   }
-  if (!response) return null;
-  const text = response.response.text();
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return null;
-  return JSON.parse(jsonMatch[0]);
+  return null;
 }
 
 // Quick identification pass — sample a few frames to detect sport/players/competition
@@ -174,7 +183,6 @@ export async function identifyMatch(
   if (!apiKey) return { sport: null, players: [], competition: null };
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
   // Sample 3 frames: start, middle, end
   const sampleIndices = [
@@ -191,7 +199,7 @@ export async function identifyMatch(
     try {
       const imageBuffer = await readFile(peaks[idx].framePath);
       const base64 = imageBuffer.toString('base64');
-      const parsed = await callGemini(model, ID_PROMPT, [
+      const parsed = await callGemini(genAI, ID_PROMPT, [
         { mimeType: 'image/jpeg', data: base64 },
       ]);
       if (!parsed) continue;
@@ -227,9 +235,8 @@ export async function analyzeWithScores(
   if (!apiKey) return [];
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-  const queue = new PQueue({ concurrency: 10 });
+  const queue = new PQueue({ concurrency: 3 });
 
   const results = await Promise.all(
     peaks.map((peak) =>
@@ -268,7 +275,7 @@ export async function analyzeWithScores(
             imageParts.push({ mimeType: 'image/jpeg', data: buf.toString('base64') });
           } catch { /* after frame may not exist at video end */ }
 
-          const parsed = await callGemini(model, prompt, imageParts);
+          const parsed = await callGemini(genAI, prompt, imageParts);
 
           // Clean up 720p temp frames
           await Promise.all([
