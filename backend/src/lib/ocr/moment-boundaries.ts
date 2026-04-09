@@ -26,40 +26,42 @@ export async function findMomentBoundaries(
 ): Promise<BoundedMoment[]> {
   if (moments.length === 0) return [];
 
-  const results: BoundedMoment[] = [];
-  for (const moment of moments) {
-    const { offset, energies } = await computeFinegrainEnergy(
-      videoPath,
-      moment.timestamp,
-      SCAN_RADIUS,
-      durationSeconds,
-    );
+  const bounded = await Promise.all(
+    moments.map(async (moment) => {
+      const { offset, energies } = await computeFinegrainEnergy(
+        videoPath,
+        moment.timestamp,
+        SCAN_RADIUS,
+        durationSeconds,
+      );
 
-    // Index of the peak within the energy array
-    const peakIdx = Math.round(moment.timestamp - offset);
+      // Index of the peak within the energy array
+      const peakIdx = Math.round(moment.timestamp - offset);
 
-    // ── Scan backward for silence gap ──
-    const startTime = scanBackward(energies, peakIdx, offset);
+      // ── Scan backward for silence gap ──
+      const startTime = scanBackward(energies, peakIdx, offset);
 
-    // ── Scan forward for silence gap ──
-    const endTime = scanForward(energies, peakIdx, offset, durationSeconds);
+      // ── Scan forward for silence gap ──
+      const endTime = scanForward(energies, peakIdx, offset, durationSeconds);
 
-    results.push({
-      ...moment,
-      startTime,
-      endTime,
-      peakTime: moment.timestamp,
-      timestamp: startTime, // override: playback starts at action beginning
-    });
-  }
+      return {
+        ...moment,
+        startTime,
+        endTime,
+        peakTime: moment.timestamp,
+        timestamp: startTime, // override: playback starts at action beginning
+      } as BoundedMoment;
+    }),
+  );
 
-  const merged = mergeOverlapping(results);
+  const merged = mergeOverlapping(bounded);
   return mergeNearDuplicates(merged);
 }
 
 /**
  * When two moments land on the same silence gap, their time windows overlap.
- * Keep the one with the higher audio energy (more exciting peak) and drop the other.
+ * Keep the one with the higher priority (importance + moment_type).
+ * Fall back to audio_energy only when priorities are equal.
  */
 function mergeOverlapping(moments: BoundedMoment[]): BoundedMoment[] {
   if (moments.length <= 1) return moments;
@@ -70,13 +72,18 @@ function mergeOverlapping(moments: BoundedMoment[]): BoundedMoment[] {
       (existing) => existing.startTime < m.endTime && m.startTime < existing.endTime,
     );
     if (overlap) {
-      // Replace if this moment has higher energy (better peak)
-      if (m.audio_energy > overlap.audio_energy) {
+      const mPriority = momentPriority(m);
+      const overlapPriority = momentPriority(overlap);
+      const keepCurrent =
+        mPriority > overlapPriority ||
+        (mPriority === overlapPriority && m.audio_energy > overlap.audio_energy);
+
+      if (keepCurrent) {
         const idx = merged.indexOf(overlap);
         merged[idx] = m;
-        console.log(`[ocr] Merged overlapping moments at ${fmtTime(overlap.peakTime)} and ${fmtTime(m.peakTime)} — kept ${fmtTime(m.peakTime)}`);
+        console.log(`[ocr] Merged overlapping: kept ${fmtTime(m.peakTime)} (priority ${mPriority}) over ${fmtTime(overlap.peakTime)} (priority ${overlapPriority})`);
       } else {
-        console.log(`[ocr] Merged overlapping moments at ${fmtTime(m.peakTime)} and ${fmtTime(overlap.peakTime)} — kept ${fmtTime(overlap.peakTime)}`);
+        console.log(`[ocr] Merged overlapping: kept ${fmtTime(overlap.peakTime)} (priority ${overlapPriority}) over ${fmtTime(m.peakTime)} (priority ${mPriority})`);
       }
     } else {
       merged.push(m);
@@ -94,6 +101,14 @@ const MOMENT_PRIORITY: Record<string, number> = {
   rally: 3, deuce: 3, challenge: 3,
   hold: 2, injury_timeout: 1,
 };
+
+function momentPriority(m: BoundedMoment): number {
+  const importancePriority =
+    m.importance === 'critical' ? 100 :
+    m.importance === 'significant' ? 50 : 0;
+  const typePriority = MOMENT_PRIORITY[m.moment_type ?? ''] ?? 0;
+  return importancePriority + typePriority;
+}
 
 /**
  * When two moments are <60s apart (peak-to-peak), keep only the more significant one.
