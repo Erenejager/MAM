@@ -10,31 +10,32 @@ describe('parseOneFrameScore', () => {
       sets: [[6, 3], [5, 2]],
       game_score: '40-15',
       serving: 'Sinner',
+      score_text: null,
     });
   });
 
   it('returns null sets when visible is false', () => {
     const raw = { visible: false, sets: null, game_score: null, serving: null };
     const result = parseOneFrameScore(raw);
-    expect(result).toEqual({ visible: false, sets: null, game_score: null, serving: null });
+    expect(result).toEqual({ visible: false, sets: null, game_score: null, serving: null, score_text: null });
   });
 
   it('returns null sets when sets array is invalid', () => {
     const raw = { visible: true, sets: 'garbage', game_score: null, serving: null };
     const result = parseOneFrameScore(raw);
-    expect(result).toEqual({ visible: true, sets: null, game_score: null, serving: null });
+    expect(result).toEqual({ visible: true, sets: null, game_score: null, serving: null, score_text: null });
   });
 
   it('filters out invalid set entries', () => {
     const raw = { visible: true, sets: [[6, 3], 'bad', [5, 2]], game_score: null, serving: null };
     const result = parseOneFrameScore(raw);
-    expect(result).toEqual({ visible: true, sets: [[6, 3], [5, 2]], game_score: null, serving: null });
+    expect(result).toEqual({ visible: true, sets: [[6, 3], [5, 2]], game_score: null, serving: null, score_text: null });
   });
 
   it('returns null sets when sets array is empty after filtering', () => {
     const raw = { visible: true, sets: ['bad', 'worse'], game_score: null, serving: null };
     const result = parseOneFrameScore(raw);
-    expect(result).toEqual({ visible: true, sets: null, game_score: null, serving: null });
+    expect(result).toEqual({ visible: true, sets: null, game_score: null, serving: null, score_text: null });
   });
 
   it('handles null input gracefully', () => {
@@ -131,5 +132,49 @@ describe('detectScoreDelta', () => {
     const before: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '30-15', serving: 'Sinner' };
     const after: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner' };
     expect(detectScoreDelta(before, after)).toBe(true);
+  });
+});
+
+describe('parseOneFrameScore — non-tennis score_text', () => {
+  it('captures score_text for non-tennis sports', () => {
+    const raw = { visible: true, score_text: 'PSG 2 - 1 Marseille', sets: null, game_score: null, serving: null };
+    const result = parseOneFrameScore(raw);
+    expect(result).toEqual({
+      visible: true,
+      sets: null,
+      game_score: null,
+      serving: null,
+      score_text: 'PSG 2 - 1 Marseille',
+    });
+  });
+
+  it('returns score_text: null when field is absent', () => {
+    const raw = { visible: true, sets: [[6, 3]], game_score: null, serving: null };
+    const result = parseOneFrameScore(raw);
+    expect(result?.score_text).toBeNull();
+  });
+});
+
+describe('computeConsensus — non-tennis readable check', () => {
+  it('treats frame as readable when score_text is present even without sets', () => {
+    const frame: FrameScore = {
+      visible: true,
+      sets: null,
+      game_score: null,
+      serving: null,
+      score_text: 'Team A 1 - 0 Team B',
+    };
+    const result = computeConsensus([frame, null, null]);
+    expect(result.score_confidence).toBe('low'); // only 1 readable frame
+    expect(result.consensus?.score_text).toBe('Team A 1 - 0 Team B');
+  });
+
+  it('returns HIGH confidence for 2 non-tennis readable frames', () => {
+    const frame: FrameScore = {
+      visible: true, sets: null, game_score: null, serving: null,
+      score_text: 'Team A 2 - 0 Team B',
+    };
+    const result = computeConsensus([frame, null, frame]);
+    expect(result.score_confidence).toBe('high');
   });
 });

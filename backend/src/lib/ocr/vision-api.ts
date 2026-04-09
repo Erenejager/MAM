@@ -23,9 +23,6 @@ export interface VisionResult {
   score_confidence: 'high' | 'low' | 'none';
 
   // Event data
-  sport: string | null;
-  players: string[];
-  competition: string | null;
   frame_type: 'live_play' | 'replay' | 'celebration' | 'close_up' | 'graphics' | 'other' | null;
   set_period: string | null;
   game_time: string | null;
@@ -306,9 +303,6 @@ export async function analyzeWithScores(
             consensus,
             score_changed,
             score_confidence,
-            sport: parsed.sport as string ?? null,
-            players: Array.isArray(parsed.players) ? (parsed.players as string[]) : [],
-            competition: parsed.competition as string ?? null,
             frame_type: validFrameTypes.includes(frameType)
               ? (frameType as VisionResult['frame_type'])
               : null,

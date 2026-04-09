@@ -3,6 +3,7 @@ export interface FrameScore {
   sets: [number, number][] | null;
   game_score: string | null;
   serving: string | null;
+  score_text: string | null;  // non-tennis: e.g. "PSG 2 - 1 Marseille"
 }
 
 export function parseOneFrameScore(raw: unknown): FrameScore | null {
@@ -27,6 +28,7 @@ export function parseOneFrameScore(raw: unknown): FrameScore | null {
     sets,
     game_score: typeof obj.game_score === 'string' ? obj.game_score : null,
     serving: typeof obj.serving === 'string' ? obj.serving : null,
+    score_text: typeof obj.score_text === 'string' ? obj.score_text : null,
   };
 }
 
@@ -36,7 +38,7 @@ export interface ConsensusResult {
 }
 
 function isReadable(fs: FrameScore | null): fs is FrameScore {
-  return fs !== null && fs.visible && fs.sets !== null;
+  return fs !== null && fs.visible && (fs.sets !== null || fs.score_text !== null);
 }
 
 export function computeConsensus(
