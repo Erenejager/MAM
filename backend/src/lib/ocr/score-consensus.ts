@@ -74,5 +74,6 @@ export function detectScoreDelta(
   if (!isReadable(before) || !isReadable(after)) return null;
   const setsChanged = !setsEqual(before.sets, after.sets);
   const gameScoreChanged = before.game_score !== after.game_score;
-  return setsChanged || gameScoreChanged;
+  const scoreTextChanged = before.score_text !== after.score_text;
+  return setsChanged || gameScoreChanged || scoreTextChanged;
 }

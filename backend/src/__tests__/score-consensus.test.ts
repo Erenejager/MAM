@@ -133,6 +133,18 @@ describe('detectScoreDelta', () => {
     const after: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner' };
     expect(detectScoreDelta(before, after)).toBe(true);
   });
+
+  it('detects score_text change for non-tennis sports', () => {
+    const before: FrameScore = { visible: true, sets: null, game_score: null, serving: null, score_text: 'Team A 0 - 0 Team B' };
+    const after: FrameScore = { visible: true, sets: null, game_score: null, serving: null, score_text: 'Team A 1 - 0 Team B' };
+    expect(detectScoreDelta(before, after)).toBe(true);
+  });
+
+  it('returns false when score_text is identical for non-tennis sports', () => {
+    const before: FrameScore = { visible: true, sets: null, game_score: null, serving: null, score_text: 'Team A 1 - 0 Team B' };
+    const after: FrameScore = { visible: true, sets: null, game_score: null, serving: null, score_text: 'Team A 1 - 0 Team B' };
+    expect(detectScoreDelta(before, after)).toBe(false);
+  });
 });
 
 describe('parseOneFrameScore — non-tennis score_text', () => {
