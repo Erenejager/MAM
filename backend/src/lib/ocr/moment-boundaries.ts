@@ -1,9 +1,11 @@
 import { computeFinegrainEnergy } from './audio-peaks.js';
 import type { KeyMoment } from './result-processing.js';
 
-const SILENCE_THRESHOLD = 0.15; // normalized energy below this = "quiet"
-const MIN_GAP_SECONDS = 1.5;   // quiet must last at least this long
-const SCAN_RADIUS = 90;        // how far back/forward to look (seconds)
+const SCAN_RADIUS = 90;            // how far back/forward to look (seconds)
+const LOOK_BACK_MAX = 25;          // max seconds to scan backward from peak
+const LOOK_FORWARD_MAX = 20;       // max seconds to scan forward from peak
+const RELATIVE_QUIET_FACTOR = 5;   // threshold = min_energy_in_window × this factor
+const MIN_ABSOLUTE_THRESHOLD = 0.05; // floor: never treat very-low energy as loud
 const FALLBACK_OFFSET_BEFORE = 10; // if no silence found, start this many seconds before peak
 const FALLBACK_OFFSET_AFTER = 5;   // if no silence found, end this many seconds after peak
 
@@ -161,30 +163,55 @@ function fmtTime(s: number): string {
 }
 
 /**
- * Scan backward from peakIdx looking for a silence gap (energy < threshold
- * sustained for MIN_GAP_SECONDS). Returns the absolute timestamp of the
- * end of that gap (= where action begins).
+ * Scan backward from peakIdx to find the noise→quiet transition just before the action.
+ *
+ * In tennis (and most sports), the decisive moment follows a pre-action silence:
+ * the crowd hushes before a serve, and roars after the point. The key moment
+ * timestamp should land at the START of that pre-action quiet — not at the roar.
+ *
+ * Strategy: compute a relative quiet threshold (5× the noise floor in the look-back
+ * window) so detection adapts to the local energy level regardless of absolute volume.
+ * Then scan backward until we find the noise→quiet transition = where this action began.
  */
 function scanBackward(energies: number[], peakIdx: number, offset: number): number {
-  let quietCount = 0;
-  for (let i = peakIdx - 1; i >= 0; i--) {
-    if (energies[i] < SILENCE_THRESHOLD) {
-      quietCount++;
-      if (quietCount >= MIN_GAP_SECONDS) {
-        // Found a sustained silence gap — action starts after it
-        return offset + i + quietCount;
-      }
-    } else {
-      quietCount = 0;
+  const searchStart = Math.max(0, peakIdx - LOOK_BACK_MAX);
+  const searchEnd = peakIdx - 1;
+
+  if (searchEnd < searchStart) {
+    return Math.max(0, offset + peakIdx - FALLBACK_OFFSET_BEFORE);
+  }
+
+  // Relative threshold: 5× the noise floor in this window.
+  // Adapts to loud venues (ATP Finals indoor crowd) and quiet ones alike.
+  const noiseFloor = Math.min(...energies.slice(searchStart, searchEnd + 1));
+  const threshold = Math.max(noiseFloor * RELATIVE_QUIET_FACTOR, MIN_ABSOLUTE_THRESHOLD);
+
+  // Walk backward from just before the peak.
+  // Once we enter quiet territory, keep going until we hit noise again —
+  // that noise→quiet boundary is where the current action began.
+  let inQuiet = false;
+  for (let i = searchEnd; i >= searchStart; i--) {
+    if (energies[i] < threshold) {
+      inQuiet = true;
+    } else if (inQuiet) {
+      // Was quiet, now noisy going backward → transition found.
+      // i+1 is the first quiet second after the preceding noise = action start.
+      return offset + i + 1;
     }
   }
-  // No silence found — use fallback offset
+
+  // Quiet all the way to the search boundary — return the boundary itself.
+  if (inQuiet) {
+    return offset + searchStart;
+  }
+
+  // No quiet found anywhere — fall back to a fixed offset before peak.
   return Math.max(0, offset + peakIdx - FALLBACK_OFFSET_BEFORE);
 }
 
 /**
- * Scan forward from peakIdx looking for a silence gap.
- * Returns the absolute timestamp of the start of that gap (= where action ends).
+ * Scan forward from peakIdx to find where the action ends (crowd settles).
+ * Uses the same relative threshold as scanBackward for consistency.
  */
 function scanForward(
   energies: number[],
@@ -192,18 +219,29 @@ function scanForward(
   offset: number,
   durationSeconds: number,
 ): number {
-  let quietCount = 0;
-  for (let i = peakIdx + 1; i < energies.length; i++) {
-    if (energies[i] < SILENCE_THRESHOLD) {
-      quietCount++;
-      if (quietCount >= MIN_GAP_SECONDS) {
-        // Found silence — action ended just before it
-        return offset + i - quietCount + 1;
+  const searchStart = peakIdx + 1;
+  const searchEnd = Math.min(energies.length - 1, peakIdx + LOOK_FORWARD_MAX);
+
+  if (searchStart > searchEnd) {
+    return Math.min(durationSeconds, offset + peakIdx + FALLBACK_OFFSET_AFTER);
+  }
+
+  const noiseFloor = Math.min(...energies.slice(searchStart, searchEnd + 1));
+  const threshold = Math.max(noiseFloor * RELATIVE_QUIET_FACTOR, MIN_ABSOLUTE_THRESHOLD);
+
+  // Scan forward: once we leave the loud section and enter quiet, that's where action ends.
+  let inQuiet = false;
+  for (let i = searchStart; i <= searchEnd; i++) {
+    if (energies[i] < threshold) {
+      if (!inQuiet) {
+        // First quiet second after the peak = crowd settling = action end.
+        return offset + i;
       }
+      inQuiet = true;
     } else {
-      quietCount = 0;
+      inQuiet = false;
     }
   }
-  // No silence found — use fallback offset
+
   return Math.min(durationSeconds, offset + peakIdx + FALLBACK_OFFSET_AFTER);
 }
