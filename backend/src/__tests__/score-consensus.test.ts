@@ -52,9 +52,9 @@ describe('parseOneFrameScore', () => {
 describe('computeConsensus', () => {
   it('returns NONE confidence when no frames are readable', () => {
     const frames: [FrameScore | null, FrameScore | null, FrameScore | null] = [
-      { visible: false, sets: null, game_score: null, serving: null },
+      { visible: false, sets: null, game_score: null, serving: null, score_text: null },
       null,
-      { visible: false, sets: null, game_score: null, serving: null },
+      { visible: false, sets: null, game_score: null, serving: null, score_text: null },
     ];
     const result = computeConsensus(frames);
     expect(result.consensus).toBeNull();
@@ -64,8 +64,8 @@ describe('computeConsensus', () => {
   it('returns LOW confidence when only 1 frame is readable', () => {
     const frames: [FrameScore | null, FrameScore | null, FrameScore | null] = [
       null,
-      { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner' },
-      { visible: false, sets: null, game_score: null, serving: null },
+      { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner', score_text: null },
+      { visible: false, sets: null, game_score: null, serving: null, score_text: null },
     ];
     const result = computeConsensus(frames);
     expect(result.consensus?.sets).toEqual([[6, 3], [5, 2]]);
@@ -73,8 +73,8 @@ describe('computeConsensus', () => {
   });
 
   it('returns HIGH confidence when 2+ frames are readable, prefers AFTER', () => {
-    const before: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner' };
-    const after: FrameScore = { visible: true, sets: [[6, 3], [5, 3]], game_score: null, serving: null };
+    const before: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner', score_text: null };
+    const after: FrameScore = { visible: true, sets: [[6, 3], [5, 3]], game_score: null, serving: null, score_text: null };
     const frames: [FrameScore | null, FrameScore | null, FrameScore | null] = [before, null, after];
     const result = computeConsensus(frames);
     expect(result.consensus?.sets).toEqual([[6, 3], [5, 3]]);
@@ -82,9 +82,9 @@ describe('computeConsensus', () => {
   });
 
   it('returns HIGH confidence when all 3 are readable, prefers AFTER', () => {
-    const before: FrameScore = { visible: true, sets: [[6, 3], [4, 2]], game_score: '30-0', serving: 'Sinner' };
-    const during: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner' };
-    const after: FrameScore = { visible: true, sets: [[6, 3], [5, 3]], game_score: null, serving: null };
+    const before: FrameScore = { visible: true, sets: [[6, 3], [4, 2]], game_score: '30-0', serving: 'Sinner', score_text: null };
+    const during: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner', score_text: null };
+    const after: FrameScore = { visible: true, sets: [[6, 3], [5, 3]], game_score: null, serving: null, score_text: null };
     const frames: [FrameScore | null, FrameScore | null, FrameScore | null] = [before, during, after];
     const result = computeConsensus(frames);
     expect(result.consensus?.sets).toEqual([[6, 3], [5, 3]]);
@@ -92,8 +92,8 @@ describe('computeConsensus', () => {
   });
 
   it('prefers DURING when AFTER is not readable', () => {
-    const before: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner' };
-    const during: FrameScore = { visible: true, sets: [[6, 3], [5, 3]], game_score: null, serving: null };
+    const before: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner', score_text: null };
+    const during: FrameScore = { visible: true, sets: [[6, 3], [5, 3]], game_score: null, serving: null, score_text: null };
     const frames: [FrameScore | null, FrameScore | null, FrameScore | null] = [before, during, null];
     const result = computeConsensus(frames);
     expect(result.consensus?.sets).toEqual([[6, 3], [5, 3]]);
@@ -103,24 +103,24 @@ describe('computeConsensus', () => {
 
 describe('detectScoreDelta', () => {
   it('returns true when BEFORE and AFTER scores differ', () => {
-    const before: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner' };
-    const after: FrameScore = { visible: true, sets: [[6, 3], [5, 3]], game_score: null, serving: null };
+    const before: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner', score_text: null };
+    const after: FrameScore = { visible: true, sets: [[6, 3], [5, 3]], game_score: null, serving: null, score_text: null };
     expect(detectScoreDelta(before, after)).toBe(true);
   });
 
   it('returns false when BEFORE and AFTER scores are the same', () => {
-    const before: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner' };
-    const after: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner' };
+    const before: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner', score_text: null };
+    const after: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner', score_text: null };
     expect(detectScoreDelta(before, after)).toBe(false);
   });
 
   it('returns null when BEFORE is not readable', () => {
-    const after: FrameScore = { visible: true, sets: [[6, 3], [5, 3]], game_score: null, serving: null };
+    const after: FrameScore = { visible: true, sets: [[6, 3], [5, 3]], game_score: null, serving: null, score_text: null };
     expect(detectScoreDelta(null, after)).toBeNull();
   });
 
   it('returns null when AFTER is not readable', () => {
-    const before: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner' };
+    const before: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner', score_text: null };
     expect(detectScoreDelta(before, null)).toBeNull();
   });
 
@@ -129,8 +129,8 @@ describe('detectScoreDelta', () => {
   });
 
   it('detects game_score change even when sets are the same', () => {
-    const before: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '30-15', serving: 'Sinner' };
-    const after: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner' };
+    const before: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '30-15', serving: 'Sinner', score_text: null };
+    const after: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner', score_text: null };
     expect(detectScoreDelta(before, after)).toBe(true);
   });
 

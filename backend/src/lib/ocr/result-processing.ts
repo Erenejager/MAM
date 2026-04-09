@@ -207,8 +207,8 @@ Return JSON array only — no markdown, no explanation:
         response = await model.generateContent([prompt]);
         break;
       } catch (err: unknown) {
-        const is429 = err instanceof Error && err.message.includes('429');
-        if (!is429 || attempt === 3) throw err;
+        const isRetryable = err instanceof Error && (err.message.includes('429') || err.message.includes('503'));
+        if (!isRetryable || attempt === 3) throw err;
         await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 1000));
       }
     }
