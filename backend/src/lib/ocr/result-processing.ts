@@ -131,7 +131,7 @@ export async function curateKeyMoments(output: OcrOutput): Promise<OcrOutput> {
   if (!apiKey || output.keyMoments.length === 0) return output;
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const CURATION_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
 
   const isTennis = output.sport?.toLowerCase() === 'tennis';
 
@@ -202,15 +202,25 @@ Return JSON array only — no markdown, no explanation:
 
   try {
     let response;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        response = await model.generateContent([prompt]);
-        break;
-      } catch (err: unknown) {
-        const isRetryable = err instanceof Error && (err.message.includes('429') || err.message.includes('503'));
-        if (!isRetryable || attempt === 3) throw err;
-        await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 1000));
+    for (const modelName of CURATION_MODELS) {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      let succeeded = false;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          response = await model.generateContent([prompt]);
+          console.log(`[ocr] Curation using ${modelName}`);
+          succeeded = true;
+          break;
+        } catch (err: unknown) {
+          const isRetryable = err instanceof Error && (err.message.includes('429') || err.message.includes('503'));
+          if (!isRetryable || attempt === 3) {
+            console.log(`[ocr] ${modelName} unavailable, trying next model...`);
+            break;
+          }
+          await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 1000));
+        }
       }
+      if (succeeded) break;
     }
 
     if (!response) return output;
