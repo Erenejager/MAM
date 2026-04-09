@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import { readFile, unlink, mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { CoarsePeak } from './peak-detection.js';
+import PQueue from 'p-queue';
 
 const execFileAsync = promisify(execFile);
 
@@ -21,61 +22,65 @@ export async function refinePeaks(
   tempDir: string,
 ): Promise<RefinedPeak[]> {
   await mkdir(tempDir, { recursive: true });
-  const results: RefinedPeak[] = [];
 
-  for (let pi = 0; pi < peaks.length; pi++) {
-    const peak = peaks[pi];
-    const windowStart = Math.max(0, Math.floor(peak.timestamp) - 15);
-    const windowEnd = Math.min(Math.ceil(durationSeconds), Math.floor(peak.timestamp) + 15);
-    const frameCount = windowEnd - windowStart;
-    if (frameCount < 2) {
-      const framePath = resolve(tempDir, `peak_${pi}.jpg`);
-      await extractSingleFrame(videoPath, peak.timestamp, framePath);
-      results.push({
-        timestamp: peak.timestamp,
-        framePath,
-        matchedKeyword: peak.matchedKeyword,
-        transcriptText: peak.transcriptText,
-        audioEnergy: peak.audioEnergy,
-      });
-      continue;
-    }
+  const queue = new PQueue({ concurrency: 6 });
 
-    const framePaths: { time: number; path: string }[] = [];
-    for (let t = windowStart; t < windowEnd; t++) {
-      const path = resolve(tempDir, `peak_${pi}_t${t}.jpg`);
-      await extractSingleFrame(videoPath, t, path);
-      framePaths.push({ time: t, path });
-    }
+  const settled = await Promise.all(
+    peaks.map((peak, pi) =>
+      queue.add(async () => {
+        const windowStart = Math.max(0, Math.floor(peak.timestamp) - 15);
+        const windowEnd = Math.min(Math.ceil(durationSeconds), Math.floor(peak.timestamp) + 15);
+        const frameCount = windowEnd - windowStart;
+        if (frameCount < 2) {
+          const framePath = resolve(tempDir, `peak_${pi}.jpg`);
+          await extractSingleFrame(videoPath, peak.timestamp, framePath);
+          return {
+            timestamp: peak.timestamp,
+            framePath,
+            matchedKeyword: peak.matchedKeyword,
+            transcriptText: peak.transcriptText,
+            audioEnergy: peak.audioEnergy,
+          } as RefinedPeak;
+        }
 
-    let bestDiff = 0;
-    let bestIndex = 0;
-    for (let i = 1; i < framePaths.length; i++) {
-      const diff = await compareOverlayZones(framePaths[i - 1].path, framePaths[i].path);
-      if (diff > bestDiff) {
-        bestDiff = diff;
-        bestIndex = i;
-      }
-    }
+        const framePaths: { time: number; path: string }[] = [];
+        for (let t = windowStart; t < windowEnd; t++) {
+          const path = resolve(tempDir, `peak_${pi}_t${t}.jpg`);
+          await extractSingleFrame(videoPath, t, path);
+          framePaths.push({ time: t, path });
+        }
 
-    const bestFrame = framePaths[bestIndex];
+        let bestDiff = 0;
+        let bestIndex = 0;
+        for (let i = 1; i < framePaths.length; i++) {
+          const diff = await compareOverlayZones(framePaths[i - 1].path, framePaths[i].path);
+          if (diff > bestDiff) {
+            bestDiff = diff;
+            bestIndex = i;
+          }
+        }
 
-    for (const fp of framePaths) {
-      if (fp.path !== bestFrame.path) {
-        await unlink(fp.path).catch(() => {});
-      }
-    }
+        const bestFrame = framePaths[bestIndex];
 
-    results.push({
-      timestamp: bestFrame.time,
-      framePath: bestFrame.path,
-      matchedKeyword: peak.matchedKeyword,
-      transcriptText: peak.transcriptText,
-      audioEnergy: peak.audioEnergy,
-    });
-  }
+        for (const fp of framePaths) {
+          if (fp.path !== bestFrame.path) {
+            await unlink(fp.path).catch(() => {});
+          }
+        }
 
-  return results;
+        return {
+          timestamp: bestFrame.time,
+          framePath: bestFrame.path,
+          matchedKeyword: peak.matchedKeyword,
+          transcriptText: peak.transcriptText,
+          audioEnergy: peak.audioEnergy,
+        } as RefinedPeak;
+      }),
+    ),
+  );
+
+  return (settled.filter((r): r is RefinedPeak => r != null))
+    .sort((a, b) => a.timestamp - b.timestamp);
 }
 
 async function extractSingleFrame(
