@@ -86,13 +86,13 @@ describe('processResults — replay filter', () => {
     expect(result.keyMoments).toHaveLength(1);
   });
 
-  it('filters probable replay: score_changed=false, high confidence, routine importance, non-live frame', () => {
+  it('filters probable replay via Tier 2: score_changed=false, high confidence, null importance, non-live frame', () => {
     const result = processResults([
       makeResult({
         frame_type: 'other',
         score_changed: false,
         score_confidence: 'high',
-        importance: 'routine',
+        importance: null,
       }),
     ]);
     expect(result.keyMoments).toHaveLength(0);
