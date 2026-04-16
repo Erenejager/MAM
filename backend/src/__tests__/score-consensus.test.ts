@@ -51,54 +51,59 @@ describe('parseOneFrameScore', () => {
 
 describe('computeConsensus', () => {
   it('returns NONE confidence when no frames are readable', () => {
-    const frames: [FrameScore | null, FrameScore | null, FrameScore | null] = [
+    const frames: [FrameScore | null, FrameScore | null, FrameScore | null, FrameScore | null, FrameScore | null] = [
       { visible: false, sets: null, game_score: null, serving: null, score_text: null },
       null,
       { visible: false, sets: null, game_score: null, serving: null, score_text: null },
+      null,
+      null,
     ];
     const result = computeConsensus(frames);
     expect(result.consensus).toBeNull();
     expect(result.score_confidence).toBe('none');
   });
 
-  it('returns LOW confidence when only 1 frame is readable', () => {
-    const frames: [FrameScore | null, FrameScore | null, FrameScore | null] = [
+  it('returns LOW confidence when only 1 frame is readable and it is pre-peak (fallback)', () => {
+    // frames[2,3,4] all unreadable → falls back to all 5 → only index 1 is readable
+    const frames: [FrameScore | null, FrameScore | null, FrameScore | null, FrameScore | null, FrameScore | null] = [
       null,
       { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner', score_text: null },
       { visible: false, sets: null, game_score: null, serving: null, score_text: null },
+      null,
+      null,
     ];
     const result = computeConsensus(frames);
     expect(result.consensus?.sets).toEqual([[6, 3], [5, 2]]);
     expect(result.score_confidence).toBe('low');
   });
 
-  it('returns HIGH confidence when 2+ frames are readable, prefers AFTER', () => {
-    const before: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner', score_text: null };
+  it('returns LOW confidence when only 1 post-peak frame is readable', () => {
+    // Only +10s (index 4) is readable
     const after: FrameScore = { visible: true, sets: [[6, 3], [5, 3]], game_score: null, serving: null, score_text: null };
-    const frames: [FrameScore | null, FrameScore | null, FrameScore | null] = [before, null, after];
+    const frames: [FrameScore | null, FrameScore | null, FrameScore | null, FrameScore | null, FrameScore | null] = [null, null, null, null, after];
+    const result = computeConsensus(frames);
+    expect(result.consensus?.sets).toEqual([[6, 3], [5, 3]]);
+    expect(result.score_confidence).toBe('low');
+  });
+
+  it('returns HIGH confidence when +5s and +10s frames agree', () => {
+    // Two post-peak frames (indices 3 and 4) agree — pre-peak (index 0) is ignored
+    const prePeak: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner', score_text: null };
+    const postPeak: FrameScore = { visible: true, sets: [[6, 3], [5, 3]], game_score: null, serving: null, score_text: null };
+    const frames: [FrameScore | null, FrameScore | null, FrameScore | null, FrameScore | null, FrameScore | null] = [prePeak, null, null, postPeak, postPeak];
     const result = computeConsensus(frames);
     expect(result.consensus?.sets).toEqual([[6, 3], [5, 3]]);
     expect(result.score_confidence).toBe('high');
   });
 
-  it('returns HIGH confidence when all 3 are readable, prefers AFTER', () => {
-    const before: FrameScore = { visible: true, sets: [[6, 3], [4, 2]], game_score: '30-0', serving: 'Sinner', score_text: null };
-    const during: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner', score_text: null };
-    const after: FrameScore = { visible: true, sets: [[6, 3], [5, 3]], game_score: null, serving: null, score_text: null };
-    const frames: [FrameScore | null, FrameScore | null, FrameScore | null] = [before, during, after];
+  it('returns HIGH confidence when peak and post-peak frames agree (indices 2, 3, 4)', () => {
+    const score: FrameScore = { visible: true, sets: [[6, 3], [5, 3]], game_score: null, serving: null, score_text: null };
+    const frames: [FrameScore | null, FrameScore | null, FrameScore | null, FrameScore | null, FrameScore | null] = [null, null, score, score, score];
     const result = computeConsensus(frames);
     expect(result.consensus?.sets).toEqual([[6, 3], [5, 3]]);
     expect(result.score_confidence).toBe('high');
   });
 
-  it('prefers DURING when AFTER is not readable', () => {
-    const before: FrameScore = { visible: true, sets: [[6, 3], [5, 2]], game_score: '40-15', serving: 'Sinner', score_text: null };
-    const during: FrameScore = { visible: true, sets: [[6, 3], [5, 3]], game_score: null, serving: null, score_text: null };
-    const frames: [FrameScore | null, FrameScore | null, FrameScore | null] = [before, during, null];
-    const result = computeConsensus(frames);
-    expect(result.consensus?.sets).toEqual([[6, 3], [5, 3]]);
-    expect(result.score_confidence).toBe('high');
-  });
 });
 
 describe('detectScoreDelta', () => {
@@ -176,7 +181,7 @@ describe('computeConsensus — non-tennis readable check', () => {
       serving: null,
       score_text: 'Team A 1 - 0 Team B',
     };
-    const result = computeConsensus([frame, null, null]);
+    const result = computeConsensus([frame, null, null, null, null]);
     expect(result.score_confidence).toBe('low'); // only 1 readable frame
     expect(result.consensus?.score_text).toBe('Team A 1 - 0 Team B');
   });
@@ -186,7 +191,7 @@ describe('computeConsensus — non-tennis readable check', () => {
       visible: true, sets: null, game_score: null, serving: null,
       score_text: 'Team A 2 - 0 Team B',
     };
-    const result = computeConsensus([frame, null, frame]);
+    const result = computeConsensus([frame, null, frame, null, null]);
     expect(result.score_confidence).toBe('high');
   });
 });

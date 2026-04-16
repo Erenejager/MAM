@@ -42,22 +42,55 @@ function isReadable(fs: FrameScore | null): fs is FrameScore {
 }
 
 export function computeConsensus(
-  frames: [FrameScore | null, FrameScore | null, FrameScore | null],
+  frames: [FrameScore | null, FrameScore | null, FrameScore | null, FrameScore | null, FrameScore | null],
 ): ConsensusResult {
-  const [before, during, after] = frames;
-  const readable = [before, during, after].filter(isReadable);
+  const pool = frames.filter(isReadable);
 
-  if (readable.length === 0) {
+  if (pool.length === 0) {
     return { consensus: null, score_confidence: 'none' };
   }
 
-  if (readable.length === 1) {
-    return { consensus: readable[0], score_confidence: 'low' };
+  if (pool.length === 1) {
+    return { consensus: pool[0], score_confidence: 'low' };
   }
 
-  // 2+ readable — prefer AFTER, then DURING, then BEFORE
-  const preferred = isReadable(after) ? after : isReadable(during) ? during : before;
-  return { consensus: preferred, score_confidence: 'high' };
+  // Majority vote on sets — group frames by their sets value and find the most common.
+  // This prevents one hallucinated frame from overriding correct ones.
+  const groups = new Map<string, { count: number; frame: FrameScore }>();
+  for (const f of pool) {
+    const key = JSON.stringify(f.sets);
+    const existing = groups.get(key);
+    if (existing) existing.count++;
+    else groups.set(key, { count: 1, frame: f });
+  }
+
+  // Pick the group with the most votes; on a tie prefer the one with more sets entries
+  // (more complete scoreboard read) and then later frames (last in pool).
+  let best: { count: number; frame: FrameScore } | null = null;
+  for (const g of groups.values()) {
+    if (
+      !best ||
+      g.count > best.count ||
+      (g.count === best.count &&
+        (g.frame.sets?.length ?? 0) > (best.frame.sets?.length ?? 0))
+    ) {
+      best = g;
+    }
+  }
+
+  const majority = best!;
+  // High confidence: 2+ frames agree. Low: all frames disagree (every frame different).
+  const score_confidence: ConsensusResult['score_confidence'] =
+    majority.count >= 2 ? 'high' : 'low';
+
+  // For game_score and serving, pick the last matching frame
+  // (post-point frames have the most stable scoreboard).
+  const matchingFrames = pool.filter(
+    (f) => JSON.stringify(f.sets) === JSON.stringify(majority.frame.sets),
+  );
+  const representative = matchingFrames[matchingFrames.length - 1];
+
+  return { consensus: representative, score_confidence };
 }
 
 function setsEqual(a: [number, number][] | null, b: [number, number][] | null): boolean {

@@ -29,3 +29,7 @@ sqlite.pragma('foreign_keys = ON');
 
 export const db = drizzle(sqlite, { schema });
 export { sqlite };
+
+// Tags are stored as JSON in assets.tags — no separate lookup table to rebuild.
+// This is a no-op kept for API compatibility.
+export function rebuildTagsLookup(): void {}

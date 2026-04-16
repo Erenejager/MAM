@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { readFile, unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { execFile } from 'node:child_process';
@@ -10,7 +9,21 @@ import type { FrameScore } from './score-consensus.js';
 
 const execFileAsync = promisify(execFile);
 
-const VISION_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai';
+const OPENAI_BASE_URL = 'https://api.openai.com/v1';
+
+interface ModelConfig {
+  name: string;
+  baseUrl: string;
+  apiKeyEnv: string;
+}
+
+const MODEL_CHAIN: ModelConfig[] = [
+  { name: 'gemini-2.5-flash-lite', baseUrl: GEMINI_BASE_URL, apiKeyEnv: 'GEMINI_API_KEY' },
+  { name: 'gemini-2.5-flash',      baseUrl: GEMINI_BASE_URL, apiKeyEnv: 'GEMINI_API_KEY' },
+  { name: 'gemini-1.5-flash',      baseUrl: GEMINI_BASE_URL, apiKeyEnv: 'GEMINI_API_KEY' },
+  { name: 'gpt-4o-mini',           baseUrl: OPENAI_BASE_URL, apiKeyEnv: 'OPENAI_API_KEY' },
+];
 
 export interface VisionResult {
   timestamp: number;
@@ -19,13 +32,13 @@ export interface VisionResult {
   audioEnergy: number;
 
   // Score data — structured from per-frame vision readings
-  frame_scores: [FrameScore | null, FrameScore | null, FrameScore | null];
+  frame_scores: [FrameScore | null, FrameScore | null, FrameScore | null, FrameScore | null, FrameScore | null];
   consensus: FrameScore | null;
   score_changed: boolean | null;
   score_confidence: 'high' | 'low' | 'none';
 
   // Event data
-  frame_type: 'live_play' | 'replay' | 'celebration' | 'close_up' | 'graphics' | 'other' | null;
+  frame_type: 'live' | 'replay' | 'non_content' | null;
   set_period: string | null;
   game_time: string | null;
   venue: string | null;
@@ -48,7 +61,18 @@ Return JSON only:
   "competition": "tournament or league name"
 }`;
 
-function buildAnalysisWithScoresPrompt(ctx: MatchContext, transcriptText: string, audioEnergy: number): string {
+function buildAnalysisWithScoresPrompt(ctx: MatchContext, transcriptText: string, audioEnergy: number, transcriptSegments?: { start: number; end: number; text: string }[], peakTimestamp?: number): string {
+  // Build a ±15s window (30s total) around the peak for Gemini context
+  if (transcriptSegments && peakTimestamp !== undefined) {
+    const lo = peakTimestamp - 15;
+    const hi = peakTimestamp + 15;
+    const wider = transcriptSegments
+      .filter((s) => s.end > lo && s.start < hi)
+      .map((s) => s.text)
+      .join(' ')
+      .trim();
+    if (wider) transcriptText = wider;
+  }
   const sportLine = ctx.sport ? `Sport: ${ctx.sport}` : 'Sport: unknown';
   const playersLine = ctx.players.length > 0 ? `Players: ${ctx.players.join(' vs ')}` : '';
   const compLine = ctx.competition ? `Competition: ${ctx.competition}` : '';
@@ -59,117 +83,149 @@ function buildAnalysisWithScoresPrompt(ctx: MatchContext, transcriptText: string
   const p1 = ctx.players[0] ?? 'P1';
   const p2 = ctx.players[1] ?? 'P2';
 
-  const scoreInstructions = isTennis
-    ? `For tennis:
-- "sets": array of [P1_games, P2_games] per set played so far (including current set in progress).
-  P1 is ${p1}, P2 is ${p2}. The FIRST number is ALWAYS ${p1}'s games.
-  Example: ${p1} won set 1 6-3, current set is 2-1 → [[6, 3], [2, 1]]
-- "game_score": point score in current game ("40-15", "AD-40", "deuce") or null if between games
-- "serving": who is serving ("${p1}" or "${p2}") or null if not visible
-- "visible": true if scoreboard is readable in this frame`
-    : `- "score_text": the score as displayed on screen (e.g. "PSG 2 - 1 Marseille"), or null if not visible
-- "visible": true if scoreboard is readable in this frame`;
-
   const scoreExample = isTennis
     ? `{ "visible": true, "sets": [[6, 3], [5, 2]], "game_score": "40-15", "serving": "${p1}" }`
     : `{ "visible": true, "score_text": "Team A 2 - 1 Team B" }`;
 
-  return `You are analyzing 3 frames from a sports broadcast, taken 5 seconds apart (BEFORE → DURING → AFTER).
+  const setDerivation = isTennis
+    ? `set_period: use the frame whose sets array has the MOST entries — that frame has the most complete scoreboard.
+  Count those entries: [[6,3],[5,3]] → 2 entries → "Set 2". [[6,3]] → 1 entry → "Set 1".
+  Use null only if no frame had a readable scoreboard at all.`
+    : `set_period: "1st half", "Q3", etc. if visible in any frame, or null.`;
+
+  return `You are analyzing 5 frames from a sports broadcast: [-10s, -5s, 0s (peak action), +5s, +10s].
+The +5s and +10s frames are intentionally after the action — scoreboard is most stable there.
 
 ${sportLine}
 ${playersLine}
 ${compLine}
 Crowd energy: ${energyLevel}
-Commentary at this moment: "${transcriptText || 'none'}"
 
-══════════════════════════════════════
-SECTION 1: SCOREBOARD READING
-══════════════════════════════════════
-For EACH of the 3 frames, read the scoreboard INDEPENDENTLY.
-Do NOT use the commentary or crowd energy to guess or infer scores.
-Read ONLY what is visible on the scoreboard graphic.
-If the scoreboard is not visible or not readable, set "visible": false.
+--- SCOREBOARD (read each frame independently, visuals only — never infer from commentary) ---
+CRITICAL: Player order is FIXED for this entire match. ALWAYS use: sets[0] = ${p1}, sets[1] = ${p2}.
+Never swap this order regardless of how the scoreboard appears on screen.
+${isTennis ? `Tennis scoreboard has 3 columns per player: SETS | GAMES | POINTS
+- sets: [[${p1}_games, ${p2}_games], ...] — one pair per set played, including the current set in progress.
+  ${p1} is ALWAYS index 0 (first number). ${p2} is ALWAYS index 1 (second number). Valid range: 0–7.
+  WARNING: if you see 15, 30, or 40 in that column, you are reading the POINTS column — do not include those values here.
+- game_score: point score on screen, or null between games.
+  ALWAYS format as "${p1}_points-${p2}_points" — ${p1} first, ${p2} second. Same order as sets[].
+  Valid point values: 0, 15, 30, 40, A only. Examples: "40-15" means ${p1} has 40, ${p2} has 15.
+  If you see 1–7, that is a game count — do not use it here.
+- serving: "${p1}" or "${p2}", or null.
+- visible: true only if the scoreboard is clearly readable in this frame.` : `- score_text: score as shown on screen (e.g. "PSG 2 - 1 Marseille"), or null.
+- visible: true only if the scoreboard is clearly readable in this frame.`}
 
-${scoreInstructions}
+--- EVENT (use all 5 frames + commentary below) ---
+Commentary (±15s): "${transcriptText || 'none'}"
 
-══════════════════════════════════════
-SECTION 2: EVENT DESCRIPTION
-══════════════════════════════════════
-Now compare the 3 frames. What happened between them?
-Use the frames, commentary, and crowd energy to describe the event.
+Describe the key action at the 0s frame. Visuals first; commentary is supporting context only.
 
-DETERMINE THE FRAME TYPE:
-- live_play: Active gameplay with scoreboard visible
-- replay: Slow-motion replay (look for replay graphics, slow movement, no live scoreboard)
-- celebration: Player celebrating, fist pump, crowd reaction
-- close_up: Close-up of player face, equipment, or ball — no scoreboard
-- graphics: Full-screen graphic, stats overlay, interview, pre-match ceremony
-- other: Anything else
+frame_type — classify based on the 0s (peak) frame primarily:
+  live        → any live footage: gameplay, celebration, close-up, crowd
+  replay      → slow-motion replay (look for REPLAY graphic or repeated camera angle)
+  non_content → graphics screen, stats overlay, interview, ceremony
 
-CLASSIFY the importance:
-- CRITICAL: Match point won, set/period won, game-winning moment, championship point, decisive goal, red card, knockout
-- SIGNIFICANT: Break of serve, penalty, scoring play, momentum shift, challenge/review, key save, injury timeout
-- ROUTINE: Regular point, normal play between events, standard serve hold
-- FILLER: Replay/slow-motion, crowd shots, player walking, graphics overlay, interview, pre-match ceremony
+importance — pick the HIGHEST level supported by ANY of the 5 frames (best evidence wins):
+  critical    → a set or match just ended: ANY frame shows MORE sets[] entries than a previous frame in this clip, OR commentary says "set", "match won", "championship"
+  significant → ANY frame shows: player celebrating, break point, ace, spectacular rally, very high crowd energy — OR any frame is a replay (replay = broadcast confirmed this point was worth showing again)
+  routine     → normal live play across all frames, nothing notable
+  filler      → ALL frames are non_content (stats screen, interview, ceremony) — no sport visible in any frame
+
+${setDerivation}
 
 Return JSON only:
 {
   "scores": [
     ${scoreExample},
     ${scoreExample},
+    ${scoreExample},
+    ${scoreExample},
     ${scoreExample}
   ],
-  "event": "specific description of what happened",
-  "frame_type": "live_play|replay|celebration|close_up|graphics|other",
+  "event": "what happened, 15 words or fewer",
+  "frame_type": "live|replay|non_content",
   "importance": "critical|significant|routine|filler",
-  "set_period": "set, half, round, period, quarter if visible, or null",
-  "game_time": "match clock or elapsed time if visible, or null",
-  "venue": "venue name if visible, or null",
-  "broadcaster": "network or channel if visible, or null"
+  "set_period": "Set N or null",
+  "venue": "venue name if visible, or null"
 }`;
 }
 
-async function extractFrame720p(videoPath: string, timeSeconds: number, outputPath: string): Promise<void> {
+async function extractFrame480p(videoPath: string, timeSeconds: number, outputPath: string): Promise<void> {
+  // 480p is sufficient for scoreboard reading and reduces image token cost ~75%
   await execFileAsync('ffmpeg', [
     '-ss', String(timeSeconds),
     '-i', videoPath,
     '-frames:v', '1',
-    '-vf', 'scale=-1:720',
+    '-vf', 'scale=-1:480',
     '-q:v', '3',
     '-y',
     outputPath,
   ]);
 }
 
-async function callGemini(
-  genAI: GoogleGenerativeAI,
+// Exported so result-processing.ts can share the same model chain.
+// Images array may be empty for text-only calls (e.g. curation).
+export async function callGemini(prompt: string, images: Array<{ mimeType: string; data: string }>, arrayResponse: true): Promise<unknown[] | null>;
+export async function callGemini(prompt: string, images: Array<{ mimeType: string; data: string }>, arrayResponse?: false): Promise<Record<string, unknown> | null>;
+export async function callGemini(
   prompt: string,
   images: Array<{ mimeType: string; data: string }>,
-): Promise<Record<string, unknown> | null> {
-  for (const modelName of VISION_MODELS) {
-    const model = genAI.getGenerativeModel({ model: modelName });
-    let succeeded = false;
-    let response;
+  arrayResponse = false,
+): Promise<Record<string, unknown> | unknown[] | null> {
+  const content: unknown[] = [
+    { type: 'text', text: prompt },
+    ...images.map((img) => ({
+      type: 'image_url',
+      image_url: { url: `data:${img.mimeType};base64,${img.data}` },
+    })),
+  ];
+
+  for (const model of MODEL_CHAIN) {
+    const apiKey = process.env[model.apiKeyEnv];
+    if (!apiKey) continue; // skip if key not configured
+
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        response = await model.generateContent([
-          prompt,
-          ...images.map((img) => ({ inlineData: img })),
-        ]);
-        succeeded = true;
-        break;
+        const res = await fetch(`${model.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: model.name,
+            messages: [{ role: 'user', content }],
+            max_tokens: 2000,
+            temperature: 0,
+          }),
+        });
+
+        if (!res.ok) {
+          const errText = await res.text().catch(() => res.statusText);
+          const isRetryable = res.status === 429 || res.status === 503;
+          console.log(`[ocr] ${model.name} error (attempt ${attempt}, status=${res.status}): ${errText.slice(0, 120)}`);
+          if (!isRetryable || attempt === 3) break; // try next model
+          const base = Math.pow(2, attempt) * 1000;
+          await new Promise((r) => setTimeout(r, base + Math.random() * base));
+          continue;
+        }
+
+        const json = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+        const text = json.choices?.[0]?.message?.content ?? '';
+        if (attempt > 1 || model !== MODEL_CHAIN[0]) {
+          console.log(`[ocr] succeeded with ${model.name}`);
+        }
+        const pattern = arrayResponse ? /\[[\s\S]*\]/ : /\{[\s\S]*\}/;
+        const matched = text.match(pattern);
+        if (!matched) return null;
+        return JSON.parse(matched[0]);
       } catch (err: unknown) {
-        const isRetryable = err instanceof Error && (err.message.includes('429') || err.message.includes('503'));
-        if (!isRetryable || attempt === 3) break;
-        const delay = Math.pow(2, attempt) * 1000;
-        await new Promise((r) => setTimeout(r, delay));
+        const msg = err instanceof Error ? err.message : String(err);
+        console.log(`[ocr] ${model.name} fetch error (attempt ${attempt}): ${msg.slice(0, 120)}`);
+        if (attempt === 3) break; // try next model
+        await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 1000));
       }
-    }
-    if (succeeded && response) {
-      const text = response.response.text();
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) return null;
-      return JSON.parse(jsonMatch[0]);
     }
   }
   return null;
@@ -179,11 +235,6 @@ async function callGemini(
 export async function identifyMatch(
   peaks: RefinedPeak[],
 ): Promise<MatchContext> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return { sport: null, players: [], competition: null };
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-
   // Sample 3 frames: start, middle, end
   const sampleIndices = [
     0,
@@ -199,7 +250,7 @@ export async function identifyMatch(
     try {
       const imageBuffer = await readFile(peaks[idx].framePath);
       const base64 = imageBuffer.toString('base64');
-      const parsed = await callGemini(genAI, ID_PROMPT, [
+      const parsed = await callGemini(ID_PROMPT, [
         { mimeType: 'image/jpeg', data: base64 },
       ]);
       if (!parsed) continue;
@@ -211,15 +262,32 @@ export async function identifyMatch(
     }
   }
 
-  // Deduplicate players
+  // Deduplicate players — merge names that are substrings of each other
+  // e.g. "Alcaraz" and "Carlos Alcaraz" → keep "Carlos Alcaraz"
   const playerCounts = new Map<string, { count: number; original: string }>();
   for (const p of allPlayers) {
-    const key = p.toLowerCase().trim();
-    const existing = playerCounts.get(key);
-    if (existing) existing.count++;
-    else playerCounts.set(key, { count: 1, original: p });
+    const norm = p.toLowerCase().trim();
+    // Check if this name is already covered by an existing entry (or vice versa)
+    let merged = false;
+    for (const [key, entry] of playerCounts) {
+      if (key.includes(norm) || norm.includes(key)) {
+        // Keep the longer (more complete) form
+        const better = norm.length > key.length ? p : entry.original;
+        const betterKey = better.toLowerCase().trim();
+        playerCounts.delete(key);
+        playerCounts.set(betterKey, { count: entry.count + 1, original: better });
+        merged = true;
+        break;
+      }
+    }
+    if (!merged) {
+      playerCounts.set(norm, { count: 1, original: p });
+    }
   }
-  const players = [...playerCounts.values()].map((p) => p.original);
+  // Sort by frequency descending, take top entries
+  const players = [...playerCounts.values()]
+    .sort((a, b) => b.count - a.count)
+    .map((p) => p.original);
 
   console.log(`[ocr] Identified: ${sport ?? 'unknown sport'} | ${players.join(' vs ') || 'unknown players'} | ${competition ?? 'unknown competition'}`);
   return { sport, players, competition };
@@ -230,76 +298,81 @@ export async function analyzeWithScores(
   peaks: RefinedPeak[],
   ctx: MatchContext,
   videoPath: string,
+  transcriptSegments?: { start: number; end: number; text: string }[],
 ): Promise<VisionResult[]> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return [];
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-
-  const queue = new PQueue({ concurrency: 3 });
+  const queue = new PQueue({ concurrency: 1 });
 
   const results = await Promise.all(
     peaks.map((peak) =>
       queue.add(async () => {
         try {
-          const prompt = buildAnalysisWithScoresPrompt(ctx, peak.transcriptText, peak.audioEnergy);
+          const prompt = buildAnalysisWithScoresPrompt(ctx, peak.transcriptText, peak.audioEnergy, transcriptSegments, peak.timestamp);
 
-          // Re-extract 3 frames at 720p for better scoreboard reading
+          // Extract 5 frames: -10s, -5s, 0 (peak), +5s, +10s
+          // Post-point frames (+5, +10) catch the scoreboard when broadcast holds it steady
           const tempDir = resolve(peak.framePath, '..');
-          const hqBefore = resolve(tempDir, `hq_before_${peak.timestamp}.jpg`);
-          const hqDuring = resolve(tempDir, `hq_during_${peak.timestamp}.jpg`);
-          const hqAfter = resolve(tempDir, `hq_after_${peak.timestamp}.jpg`);
+          const hqMinus10 = resolve(tempDir, `hq_m10_${peak.timestamp}.jpg`);
+          const hqMinus5  = resolve(tempDir, `hq_m5_${peak.timestamp}.jpg`);
+          const hqPeak    = resolve(tempDir, `hq_peak_${peak.timestamp}.jpg`);
+          const hqPlus5   = resolve(tempDir, `hq_p5_${peak.timestamp}.jpg`);
+          const hqPlus10  = resolve(tempDir, `hq_p10_${peak.timestamp}.jpg`);
 
-          const beforeTime = Math.max(0, peak.timestamp - 5);
-          const afterTime = peak.timestamp + 5;
+          const timeMinus10 = Math.max(0, peak.timestamp - 10);
+          const timeMinus5  = Math.max(0, peak.timestamp - 5);
+          const timePlus5   = peak.timestamp + 5;
+          const timePlus10  = peak.timestamp + 10;
 
           await Promise.all([
-            extractFrame720p(videoPath, beforeTime, hqBefore),
-            extractFrame720p(videoPath, peak.timestamp, hqDuring),
-            extractFrame720p(videoPath, afterTime, hqAfter),
+            extractFrame480p(videoPath, timeMinus10, hqMinus10),
+            extractFrame480p(videoPath, timeMinus5, hqMinus5),
+            extractFrame480p(videoPath, peak.timestamp, hqPeak),
+            extractFrame480p(videoPath, timePlus5, hqPlus5),
+            extractFrame480p(videoPath, timePlus10, hqPlus10),
           ]);
 
-          // Load 720p frames
           const imageParts: Array<{ mimeType: string; data: string }> = [];
+          for (const [path, label] of [
+            [hqMinus10, '-10s'],
+            [hqMinus5,  '-5s'],
+            [hqPeak,    'peak'],
+            [hqPlus5,   '+5s'],
+            [hqPlus10,  '+10s'],
+          ] as const) {
+            try {
+              const buf = await readFile(path);
+              imageParts.push({ mimeType: 'image/jpeg', data: buf.toString('base64') });
+            } catch { /* frame may not exist at video boundaries */ void label; }
+          }
 
-          try {
-            const buf = await readFile(hqBefore);
-            imageParts.push({ mimeType: 'image/jpeg', data: buf.toString('base64') });
-          } catch { /* before frame may not exist at video start */ }
+          const parsed = await callGemini(prompt, imageParts);
 
-          const mainBuf = await readFile(hqDuring);
-          imageParts.push({ mimeType: 'image/jpeg', data: mainBuf.toString('base64') });
-
-          try {
-            const buf = await readFile(hqAfter);
-            imageParts.push({ mimeType: 'image/jpeg', data: buf.toString('base64') });
-          } catch { /* after frame may not exist at video end */ }
-
-          const parsed = await callGemini(genAI, prompt, imageParts);
-
-          // Clean up 720p temp frames
+          // Clean up temp frames
           await Promise.all([
-            unlink(hqBefore).catch(() => {}),
-            unlink(hqDuring).catch(() => {}),
-            unlink(hqAfter).catch(() => {}),
+            unlink(hqMinus10).catch(() => {}),
+            unlink(hqMinus5).catch(() => {}),
+            unlink(hqPeak).catch(() => {}),
+            unlink(hqPlus5).catch(() => {}),
+            unlink(hqPlus10).catch(() => {}),
           ]);
 
           if (!parsed) return null;
 
           // Parse per-frame scores
           const rawScores = Array.isArray(parsed.scores) ? parsed.scores : [];
-          const frame_scores: [FrameScore | null, FrameScore | null, FrameScore | null] = [
+          const frame_scores: [FrameScore | null, FrameScore | null, FrameScore | null, FrameScore | null, FrameScore | null] = [
             parseOneFrameScore(rawScores[0]),
             parseOneFrameScore(rawScores[1]),
             parseOneFrameScore(rawScores[2]),
+            parseOneFrameScore(rawScores[3]),
+            parseOneFrameScore(rawScores[4]),
           ];
 
-          // Compute consensus and delta
+          // Compute consensus and delta (compare -10s frame vs +10s frame for widest delta)
           const { consensus, score_confidence } = computeConsensus(frame_scores);
-          const score_changed = detectScoreDelta(frame_scores[0], frame_scores[2]);
+          const score_changed = detectScoreDelta(frame_scores[0], frame_scores[4]);
 
           const frameType = String(parsed.frame_type ?? '').toLowerCase();
-          const validFrameTypes = ['live_play', 'replay', 'celebration', 'close_up', 'graphics', 'other'];
+          const validFrameTypes = ['live', 'replay', 'non_content'];
 
           return {
             timestamp: peak.timestamp,
@@ -316,7 +389,7 @@ export async function analyzeWithScores(
             set_period: parsed.set_period as string ?? null,
             game_time: parsed.game_time as string ?? null,
             venue: parsed.venue as string ?? null,
-            broadcaster: parsed.broadcaster as string ?? null,
+            broadcaster: null,
             event: parsed.event as string ?? null,
             importance: ['critical', 'significant', 'routine', 'filler'].includes(
               String(parsed.importance).toLowerCase(),

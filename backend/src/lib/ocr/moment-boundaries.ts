@@ -2,7 +2,8 @@ import { computeFinegrainEnergy } from './audio-peaks.js';
 import type { KeyMoment } from './result-processing.js';
 
 const SCAN_RADIUS = 90;            // how far back/forward to look (seconds)
-const LOOK_BACK_MAX = 25;          // max seconds to scan backward from peak
+const LOOK_BACK_MAX = 15;          // max seconds to scan backward from peak
+const LOOK_BACK_MAX_REPLAY = 40;   // longer lookback for replay peaks — original action may be 20s+ earlier
 const LOOK_FORWARD_MAX = 20;       // max seconds to scan forward from peak
 const RELATIVE_QUIET_FACTOR = 5;   // threshold = min_energy_in_window × this factor
 const MIN_ABSOLUTE_THRESHOLD = 0.05; // floor: never treat very-low energy as loud
@@ -41,7 +42,9 @@ export async function findMomentBoundaries(
       const peakIdx = Math.round(moment.timestamp - offset);
 
       // ── Scan backward for silence gap ──
-      const startTime = scanBackward(energies, peakIdx, offset);
+      // Replay peaks land on the slow-mo, not the original action — use a longer window
+      const isReplay = moment.frame_type === 'replay';
+      const startTime = scanBackward(energies, peakIdx, offset, isReplay);
 
       // ── Scan forward for silence gap ──
       const endTime = scanForward(energies, peakIdx, offset, durationSeconds);
@@ -163,50 +166,40 @@ function fmtTime(s: number): string {
 }
 
 /**
- * Scan backward from peakIdx to find the noise→quiet transition just before the action.
+ * Scan backward from peakIdx to find the quietest moment before the action.
  *
- * In tennis (and most sports), the decisive moment follows a pre-action silence:
- * the crowd hushes before a serve, and roars after the point. The key moment
- * timestamp should land at the START of that pre-action quiet — not at the roar.
- *
- * Strategy: compute a relative quiet threshold (5× the noise floor in the look-back
- * window) so detection adapts to the local energy level regardless of absolute volume.
- * Then scan backward until we find the noise→quiet transition = where this action began.
+ * Slides a 2-second window across the look-back range and picks the window
+ * with the lowest average energy — that's the natural silence gap between
+ * two actions (e.g. crowd hush before a serve). The start of that window
+ * becomes the moment's startTime.
  */
-function scanBackward(energies: number[], peakIdx: number, offset: number): number {
-  const searchStart = Math.max(0, peakIdx - LOOK_BACK_MAX);
+function scanBackward(energies: number[], peakIdx: number, offset: number, isReplay = false): number {
+  const lookBackMax = isReplay ? LOOK_BACK_MAX_REPLAY : LOOK_BACK_MAX;
+  const searchStart = Math.max(0, peakIdx - lookBackMax);
   const searchEnd = peakIdx - 1;
 
   if (searchEnd < searchStart) {
     return Math.max(0, offset + peakIdx - FALLBACK_OFFSET_BEFORE);
   }
 
-  // Relative threshold: 5× the noise floor in this window.
-  // Adapts to loud venues (ATP Finals indoor crowd) and quiet ones alike.
-  const noiseFloor = Math.min(...energies.slice(searchStart, searchEnd + 1));
-  const threshold = Math.max(noiseFloor * RELATIVE_QUIET_FACTOR, MIN_ABSOLUTE_THRESHOLD);
+  // Slide a 3s window and find the position with the lowest average energy.
+  const windowSize = 3;
+  let bestIdx = searchStart;
+  let bestAvg = Infinity;
 
-  // Walk backward from just before the peak.
-  // Once we enter quiet territory, keep going until we hit noise again —
-  // that noise→quiet boundary is where the current action began.
-  let inQuiet = false;
-  for (let i = searchEnd; i >= searchStart; i--) {
-    if (energies[i] < threshold) {
-      inQuiet = true;
-    } else if (inQuiet) {
-      // Was quiet, now noisy going backward → transition found.
-      // i+1 is the first quiet second after the preceding noise = action start.
-      return offset + i + 1;
+  for (let i = searchStart; i <= searchEnd - windowSize + 1; i++) {
+    let sum = 0;
+    for (let j = i; j < i + windowSize; j++) {
+      sum += energies[j];
+    }
+    const avg = sum / windowSize;
+    if (avg < bestAvg) {
+      bestAvg = avg;
+      bestIdx = i;
     }
   }
 
-  // Quiet all the way to the search boundary — return the boundary itself.
-  if (inQuiet) {
-    return offset + searchStart;
-  }
-
-  // No quiet found anywhere — fall back to a fixed offset before peak.
-  return Math.max(0, offset + peakIdx - FALLBACK_OFFSET_BEFORE);
+  return offset + bestIdx;
 }
 
 /**
