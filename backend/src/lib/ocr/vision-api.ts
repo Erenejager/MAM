@@ -139,7 +139,7 @@ async function extractFrame720p(videoPath: string, timeSeconds: number, outputPa
     '-q:v', '3',
     '-y',
     outputPath,
-  ]);
+  ], { timeout: 30_000 });
 }
 
 async function callGemini(

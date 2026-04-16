@@ -91,7 +91,7 @@ async function extractSingleFrame(
     '-q:v', '3',
     '-y',
     outputPath,
-  ]);
+  ], { timeout: 30_000 });
 }
 
 async function compareOverlayZones(
@@ -150,7 +150,7 @@ async function extractRawPixels(imagePath: string): Promise<Buffer> {
       '-f', 'rawvideo',
       'pipe:1',
     ],
-    { encoding: 'buffer', maxBuffer: 10 * 1024 * 1024 },
+    { encoding: 'buffer', maxBuffer: 10 * 1024 * 1024, timeout: 30_000 },
   );
   return stdout;
 }

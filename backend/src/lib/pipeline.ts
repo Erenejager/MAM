@@ -377,12 +377,13 @@ export async function runPipeline(assetId: string): Promise<void> {
         // Video too short for meaningful analysis
         updateAsset(assetId, { ocrStatus: 'skipped' });
       } else {
-        const result = await runOcrPipeline(
-          filePath,
-          duration,
-          segments,
-          assetDir,
-        );
+        const OCR_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes max
+        const result = await Promise.race([
+          runOcrPipeline(filePath, duration, segments, assetDir),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`OCR pipeline timed out after ${OCR_TIMEOUT_MS / 1000}s`)), OCR_TIMEOUT_MS),
+          ),
+        ]);
 
         if (result.keyMoments.length === 0) {
           updateAsset(assetId, { ocrStatus: 'complete' });

@@ -175,5 +175,5 @@ async function extractSingleFrame(
     '-q:v', '3',
     '-y',
     outputPath,
-  ]);
+  ], { timeout: 30_000 });
 }
