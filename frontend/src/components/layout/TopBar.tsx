@@ -139,16 +139,17 @@ export function TopBar({
     const words = trimmed.split(/\s+/);
     const lastWord = words[words.length - 1];
     if (lastWord.length < 2) return '';
-    // Prefer word-type suggestions that complete the last word
-    const wordMatch = apiSuggestions.find(
-      (s) => s.type === 'word' && s.text.toLowerCase().startsWith(lastWord),
-    );
-    if (wordMatch) return wordMatch.text.slice(lastWord.length);
+    // Extract individual words from asset/tag suggestions and find a match
+    for (const s of apiSuggestions) {
+      const parts = s.text.toLowerCase().split(/[-_\s]+/);
+      const match = parts.find((w) => w.startsWith(lastWord) && w.length > lastWord.length);
+      if (match) return match.slice(lastWord.length);
+    }
     return '';
   })();
 
-  // Non-word suggestions for the dropdown (assets + tags)
-  const dropdownSuggestions = apiSuggestions.filter((s) => s.type !== 'word');
+  // All suggestions go to the dropdown (assets + tags)
+  const dropdownSuggestions = apiSuggestions;
 
   // Reset highlight when suggestions change
   useEffect(() => { setHighlightIndex(-1); }, [apiSuggestions]);

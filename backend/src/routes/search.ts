@@ -28,6 +28,10 @@ interface SearchResultItem {
     timestamp: number;
     matchCount: number;
   };
+  transcriptMatches?: {
+    text: string;
+    timestamp: number;
+  }[];
 }
 
 export async function searchRoutes(fastify: FastifyInstance): Promise<void> {
@@ -72,16 +76,25 @@ export async function searchRoutes(fastify: FastifyInstance): Promise<void> {
               ? data
               : data.segments || [];
 
-            const timestamp = resolveTranscriptTimestamp(
-              segments,
-              hit.highlight.transcript[0],
-            );
+            // Resolve all fragments, deduplicating by timestamp
+            const seen = new Set<number>();
+            const allMatches: { text: string; timestamp: number }[] = [];
+            for (const fragment of hit.highlight.transcript) {
+              const timestamp = resolveTranscriptTimestamp(segments, fragment);
+              if (!seen.has(timestamp)) {
+                seen.add(timestamp);
+                allMatches.push({ text: fragment, timestamp });
+              }
+            }
 
-            result.transcriptMatch = {
-              text: hit.highlight.transcript[0],
-              timestamp,
-              matchCount: hit.highlight.transcript.length,
-            };
+            if (allMatches.length > 0) {
+              result.transcriptMatch = {
+                text: allMatches[0].text,
+                timestamp: allMatches[0].timestamp,
+                matchCount: hit.highlight.transcript.length,
+              };
+              result.transcriptMatches = allMatches;
+            }
           } catch (err) {
             // transcript.json missing or unreadable — skip timestamp resolution
             request.log.warn(

@@ -119,7 +119,7 @@ export async function searchAssets(q: string, tags?: string[]): Promise<SearchRe
 }
 
 export interface Suggestion {
-  type: 'asset' | 'word';
+  type: 'asset' | 'tag';
   id: string | null;
   text: string;
 }
