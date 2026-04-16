@@ -1,13 +1,18 @@
-const ACTION_KEYWORDS = new Set([
+const HIGH_VALUE_KEYWORDS = new Set([
+  // Definitive match outcomes
+  'champion', 'championship', 'victory', 'wins', 'winner', 'won',
+  'final', 'knockout', 'submission', 'medal', 'trophy', 'title',
+]);
+
+const STANDARD_KEYWORDS = new Set([
   // Universal
-  'goal', 'scores', 'scored', 'point', 'wins', 'winner', 'won',
-  'save', 'saved', 'miss', 'missed', 'match', 'final', 'record',
-  'champion', 'championship', 'victory', 'defeat', 'defeated',
-  'finish', 'finished', 'title', 'trophy', 'medal',
+  'goal', 'scores', 'scored', 'point',
+  'save', 'saved', 'miss', 'missed', 'match', 'record',
+  'defeat', 'defeated', 'finish', 'finished',
   // Periods
   'set', 'game', 'round', 'half', 'period', 'quarter', 'overtime',
   // Events
-  'break', 'penalty', 'foul', 'card', 'knockout', 'submission',
+  'break', 'penalty', 'foul', 'card',
   'try', 'conversion', 'converts', 'converted',
   // Tennis
   'ace', 'serve', 'forehand', 'backhand', 'volley', 'deuce',
@@ -58,25 +63,33 @@ export function scoreTranscript(
 
     let matchedKeyword: string | null = null;
     let keywordTimestamp: number | null = null;
+    let score = 0;
 
     // Check each segment individually to preserve word-level timestamp
     for (const seg of overlapping) {
       const words = seg.text.toLowerCase().split(/\s+/);
       for (const word of words) {
         const clean = word.replace(/^[^a-z]+|[^a-z]+$/g, '');
-        if (ACTION_KEYWORDS.has(clean)) {
-          matchedKeyword = clean;
-          keywordTimestamp = seg.start;
-          break;
+        if (HIGH_VALUE_KEYWORDS.has(clean)) {
+          if (!matchedKeyword) {
+            matchedKeyword = clean;
+            keywordTimestamp = seg.start;
+          }
+          score = Math.min(1.0, score + 0.7);
+        } else if (STANDARD_KEYWORDS.has(clean)) {
+          if (!matchedKeyword) {
+            matchedKeyword = clean;
+            keywordTimestamp = seg.start;
+          }
+          score = Math.min(1.0, score + 0.3);
         }
       }
-      if (matchedKeyword) break;
     }
 
     results.push({
       windowStart,
       windowEnd,
-      transcriptScore: matchedKeyword ? 1 : 0,
+      transcriptScore: score,
       matchedKeyword,
       keywordTimestamp,
       transcriptText: overlapping.map((s) => s.text).join(' ').trim(),

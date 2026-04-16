@@ -1,9 +1,12 @@
 import { computeFinegrainEnergy } from './audio-peaks.js';
 import type { KeyMoment } from './result-processing.js';
 
-const SILENCE_THRESHOLD = 0.15; // normalized energy below this = "quiet"
-const MIN_GAP_SECONDS = 1.5;   // quiet must last at least this long
-const SCAN_RADIUS = 90;        // how far back/forward to look (seconds)
+const SCAN_RADIUS = 90;            // how far back/forward to look (seconds)
+const LOOK_BACK_MAX = 15;          // max seconds to scan backward from peak
+const LOOK_BACK_MAX_REPLAY = 40;   // longer lookback for replay peaks — original action may be 20s+ earlier
+const LOOK_FORWARD_MAX = 20;       // max seconds to scan forward from peak
+const RELATIVE_QUIET_FACTOR = 5;   // threshold = min_energy_in_window × this factor
+const MIN_ABSOLUTE_THRESHOLD = 0.05; // floor: never treat very-low energy as loud
 const FALLBACK_OFFSET_BEFORE = 10; // if no silence found, start this many seconds before peak
 const FALLBACK_OFFSET_AFTER = 5;   // if no silence found, end this many seconds after peak
 
@@ -26,40 +29,44 @@ export async function findMomentBoundaries(
 ): Promise<BoundedMoment[]> {
   if (moments.length === 0) return [];
 
-  const results: BoundedMoment[] = [];
-  for (const moment of moments) {
-    const { offset, energies } = await computeFinegrainEnergy(
-      videoPath,
-      moment.timestamp,
-      SCAN_RADIUS,
-      durationSeconds,
-    );
+  const bounded = await Promise.all(
+    moments.map(async (moment) => {
+      const { offset, energies } = await computeFinegrainEnergy(
+        videoPath,
+        moment.timestamp,
+        SCAN_RADIUS,
+        durationSeconds,
+      );
 
-    // Index of the peak within the energy array
-    const peakIdx = Math.round(moment.timestamp - offset);
+      // Index of the peak within the energy array
+      const peakIdx = Math.round(moment.timestamp - offset);
 
-    // ── Scan backward for silence gap ──
-    const startTime = scanBackward(energies, peakIdx, offset);
+      // ── Scan backward for silence gap ──
+      // Replay peaks land on the slow-mo, not the original action — use a longer window
+      const isReplay = moment.frame_type === 'replay';
+      const startTime = scanBackward(energies, peakIdx, offset, isReplay);
 
-    // ── Scan forward for silence gap ──
-    const endTime = scanForward(energies, peakIdx, offset, durationSeconds);
+      // ── Scan forward for silence gap ──
+      const endTime = scanForward(energies, peakIdx, offset, durationSeconds);
 
-    results.push({
-      ...moment,
-      startTime,
-      endTime,
-      peakTime: moment.timestamp,
-      timestamp: startTime, // override: playback starts at action beginning
-    });
-  }
+      return {
+        ...moment,
+        startTime,
+        endTime,
+        peakTime: moment.timestamp,
+        timestamp: startTime, // override: playback starts at action beginning
+      } as BoundedMoment;
+    }),
+  );
 
-  const merged = mergeOverlapping(results);
+  const merged = mergeOverlapping(bounded);
   return mergeNearDuplicates(merged);
 }
 
 /**
  * When two moments land on the same silence gap, their time windows overlap.
- * Keep the one with the higher audio energy (more exciting peak) and drop the other.
+ * Keep the one with the higher priority (importance + moment_type).
+ * Fall back to audio_energy only when priorities are equal.
  */
 function mergeOverlapping(moments: BoundedMoment[]): BoundedMoment[] {
   if (moments.length <= 1) return moments;
@@ -70,13 +77,18 @@ function mergeOverlapping(moments: BoundedMoment[]): BoundedMoment[] {
       (existing) => existing.startTime < m.endTime && m.startTime < existing.endTime,
     );
     if (overlap) {
-      // Replace if this moment has higher energy (better peak)
-      if (m.audio_energy > overlap.audio_energy) {
+      const mPriority = momentPriority(m);
+      const overlapPriority = momentPriority(overlap);
+      const keepCurrent =
+        mPriority > overlapPriority ||
+        (mPriority === overlapPriority && m.audio_energy > overlap.audio_energy);
+
+      if (keepCurrent) {
         const idx = merged.indexOf(overlap);
         merged[idx] = m;
-        console.log(`[ocr] Merged overlapping moments at ${fmtTime(overlap.peakTime)} and ${fmtTime(m.peakTime)} — kept ${fmtTime(m.peakTime)}`);
+        console.log(`[ocr] Merged overlapping: kept ${fmtTime(m.peakTime)} (priority ${mPriority}) over ${fmtTime(overlap.peakTime)} (priority ${overlapPriority})`);
       } else {
-        console.log(`[ocr] Merged overlapping moments at ${fmtTime(m.peakTime)} and ${fmtTime(overlap.peakTime)} — kept ${fmtTime(overlap.peakTime)}`);
+        console.log(`[ocr] Merged overlapping: kept ${fmtTime(overlap.peakTime)} (priority ${overlapPriority}) over ${fmtTime(m.peakTime)} (priority ${mPriority})`);
       }
     } else {
       merged.push(m);
@@ -94,6 +106,14 @@ const MOMENT_PRIORITY: Record<string, number> = {
   rally: 3, deuce: 3, challenge: 3,
   hold: 2, injury_timeout: 1,
 };
+
+function momentPriority(m: BoundedMoment): number {
+  const importancePriority =
+    m.importance === 'critical' ? 100 :
+    m.importance === 'significant' ? 50 : 0;
+  const typePriority = MOMENT_PRIORITY[m.moment_type ?? ''] ?? 0;
+  return importancePriority + typePriority;
+}
 
 /**
  * When two moments are <60s apart (peak-to-peak), keep only the more significant one.
@@ -146,30 +166,45 @@ function fmtTime(s: number): string {
 }
 
 /**
- * Scan backward from peakIdx looking for a silence gap (energy < threshold
- * sustained for MIN_GAP_SECONDS). Returns the absolute timestamp of the
- * end of that gap (= where action begins).
+ * Scan backward from peakIdx to find the quietest moment before the action.
+ *
+ * Slides a 2-second window across the look-back range and picks the window
+ * with the lowest average energy — that's the natural silence gap between
+ * two actions (e.g. crowd hush before a serve). The start of that window
+ * becomes the moment's startTime.
  */
-function scanBackward(energies: number[], peakIdx: number, offset: number): number {
-  let quietCount = 0;
-  for (let i = peakIdx - 1; i >= 0; i--) {
-    if (energies[i] < SILENCE_THRESHOLD) {
-      quietCount++;
-      if (quietCount >= MIN_GAP_SECONDS) {
-        // Found a sustained silence gap — action starts after it
-        return offset + i + quietCount;
-      }
-    } else {
-      quietCount = 0;
+function scanBackward(energies: number[], peakIdx: number, offset: number, isReplay = false): number {
+  const lookBackMax = isReplay ? LOOK_BACK_MAX_REPLAY : LOOK_BACK_MAX;
+  const searchStart = Math.max(0, peakIdx - lookBackMax);
+  const searchEnd = peakIdx - 1;
+
+  if (searchEnd < searchStart) {
+    return Math.max(0, offset + peakIdx - FALLBACK_OFFSET_BEFORE);
+  }
+
+  // Slide a 3s window and find the position with the lowest average energy.
+  const windowSize = 3;
+  let bestIdx = searchStart;
+  let bestAvg = Infinity;
+
+  for (let i = searchStart; i <= searchEnd - windowSize + 1; i++) {
+    let sum = 0;
+    for (let j = i; j < i + windowSize; j++) {
+      sum += energies[j];
+    }
+    const avg = sum / windowSize;
+    if (avg < bestAvg) {
+      bestAvg = avg;
+      bestIdx = i;
     }
   }
-  // No silence found — use fallback offset
-  return Math.max(0, offset + peakIdx - FALLBACK_OFFSET_BEFORE);
+
+  return offset + bestIdx;
 }
 
 /**
- * Scan forward from peakIdx looking for a silence gap.
- * Returns the absolute timestamp of the start of that gap (= where action ends).
+ * Scan forward from peakIdx to find where the action ends (crowd settles).
+ * Uses the same relative threshold as scanBackward for consistency.
  */
 function scanForward(
   energies: number[],
@@ -177,18 +212,29 @@ function scanForward(
   offset: number,
   durationSeconds: number,
 ): number {
-  let quietCount = 0;
-  for (let i = peakIdx + 1; i < energies.length; i++) {
-    if (energies[i] < SILENCE_THRESHOLD) {
-      quietCount++;
-      if (quietCount >= MIN_GAP_SECONDS) {
-        // Found silence — action ended just before it
-        return offset + i - quietCount + 1;
+  const searchStart = peakIdx + 1;
+  const searchEnd = Math.min(energies.length - 1, peakIdx + LOOK_FORWARD_MAX);
+
+  if (searchStart > searchEnd) {
+    return Math.min(durationSeconds, offset + peakIdx + FALLBACK_OFFSET_AFTER);
+  }
+
+  const noiseFloor = Math.min(...energies.slice(searchStart, searchEnd + 1));
+  const threshold = Math.max(noiseFloor * RELATIVE_QUIET_FACTOR, MIN_ABSOLUTE_THRESHOLD);
+
+  // Scan forward: once we leave the loud section and enter quiet, that's where action ends.
+  let inQuiet = false;
+  for (let i = searchStart; i <= searchEnd; i++) {
+    if (energies[i] < threshold) {
+      if (!inQuiet) {
+        // First quiet second after the peak = crowd settling = action end.
+        return offset + i;
       }
+      inQuiet = true;
     } else {
-      quietCount = 0;
+      inQuiet = false;
     }
   }
-  // No silence found — use fallback offset
+
   return Math.min(durationSeconds, offset + peakIdx + FALLBACK_OFFSET_AFTER);
 }

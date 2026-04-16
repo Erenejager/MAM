@@ -37,3 +37,49 @@ describe('scoreTranscript', () => {
     expect(results[0].keywordTimestamp).toBe(1.0);
   });
 });
+
+describe('scoreTranscript — keyword tiers', () => {
+  it('scores a high-value keyword at 0.7', () => {
+    const segments: TranscriptSegment[] = [
+      { start: 1.0, end: 4.0, text: 'Alcaraz is the champion' },
+    ];
+    const results = scoreTranscript(segments, 10);
+    expect(results[0].transcriptScore).toBeCloseTo(0.7);
+    expect(results[0].matchedKeyword).toBe('champion');
+  });
+
+  it('scores a standard keyword at 0.3', () => {
+    const segments: TranscriptSegment[] = [
+      { start: 1.0, end: 4.0, text: 'he hits an ace' },
+    ];
+    const results = scoreTranscript(segments, 10);
+    expect(results[0].transcriptScore).toBeCloseTo(0.3);
+    expect(results[0].matchedKeyword).toBe('ace');
+  });
+
+  it('accumulates multiple standard keywords and does not exceed 1.0', () => {
+    const segments: TranscriptSegment[] = [
+      { start: 1.0, end: 9.0, text: 'incredible amazing brilliant play' },
+    ];
+    const results = scoreTranscript(segments, 10);
+    // 3 standard keywords: 0.3 + 0.3 + 0.3 = 0.9
+    expect(results[0].transcriptScore).toBeCloseTo(0.9);
+  });
+
+  it('caps score at 1.0', () => {
+    const segments: TranscriptSegment[] = [
+      { start: 1.0, end: 9.0, text: 'incredible amazing brilliant champion victory' },
+    ];
+    const results = scoreTranscript(segments, 10);
+    expect(results[0].transcriptScore).toBeCloseTo(1.0);
+  });
+
+  it('no keyword window still scores 0', () => {
+    const segments: TranscriptSegment[] = [
+      { start: 0, end: 5, text: 'the ball rolls slowly across the grass' },
+    ];
+    const results = scoreTranscript(segments, 10);
+    expect(results[0].transcriptScore).toBe(0);
+    expect(results[0].matchedKeyword).toBeNull();
+  });
+});

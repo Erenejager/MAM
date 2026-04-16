@@ -3,6 +3,7 @@ export interface FrameScore {
   sets: [number, number][] | null;
   game_score: string | null;
   serving: string | null;
+  score_text: string | null;  // non-tennis: e.g. "PSG 2 - 1 Marseille"
 }
 
 export function parseOneFrameScore(raw: unknown): FrameScore | null {
@@ -27,6 +28,7 @@ export function parseOneFrameScore(raw: unknown): FrameScore | null {
     sets,
     game_score: typeof obj.game_score === 'string' ? obj.game_score : null,
     serving: typeof obj.serving === 'string' ? obj.serving : null,
+    score_text: typeof obj.score_text === 'string' ? obj.score_text : null,
   };
 }
 
@@ -36,26 +38,59 @@ export interface ConsensusResult {
 }
 
 function isReadable(fs: FrameScore | null): fs is FrameScore {
-  return fs !== null && fs.visible && fs.sets !== null;
+  return fs !== null && fs.visible && (fs.sets !== null || fs.score_text !== null);
 }
 
 export function computeConsensus(
-  frames: [FrameScore | null, FrameScore | null, FrameScore | null],
+  frames: [FrameScore | null, FrameScore | null, FrameScore | null, FrameScore | null, FrameScore | null],
 ): ConsensusResult {
-  const [before, during, after] = frames;
-  const readable = [before, during, after].filter(isReadable);
+  const pool = frames.filter(isReadable);
 
-  if (readable.length === 0) {
+  if (pool.length === 0) {
     return { consensus: null, score_confidence: 'none' };
   }
 
-  if (readable.length === 1) {
-    return { consensus: readable[0], score_confidence: 'low' };
+  if (pool.length === 1) {
+    return { consensus: pool[0], score_confidence: 'low' };
   }
 
-  // 2+ readable — prefer AFTER, then DURING, then BEFORE
-  const preferred = isReadable(after) ? after : isReadable(during) ? during : before;
-  return { consensus: preferred, score_confidence: 'high' };
+  // Majority vote on sets — group frames by their sets value and find the most common.
+  // This prevents one hallucinated frame from overriding correct ones.
+  const groups = new Map<string, { count: number; frame: FrameScore }>();
+  for (const f of pool) {
+    const key = JSON.stringify(f.sets);
+    const existing = groups.get(key);
+    if (existing) existing.count++;
+    else groups.set(key, { count: 1, frame: f });
+  }
+
+  // Pick the group with the most votes; on a tie prefer the one with more sets entries
+  // (more complete scoreboard read) and then later frames (last in pool).
+  let best: { count: number; frame: FrameScore } | null = null;
+  for (const g of groups.values()) {
+    if (
+      !best ||
+      g.count > best.count ||
+      (g.count === best.count &&
+        (g.frame.sets?.length ?? 0) > (best.frame.sets?.length ?? 0))
+    ) {
+      best = g;
+    }
+  }
+
+  const majority = best!;
+  // High confidence: 2+ frames agree. Low: all frames disagree (every frame different).
+  const score_confidence: ConsensusResult['score_confidence'] =
+    majority.count >= 2 ? 'high' : 'low';
+
+  // For game_score and serving, pick the last matching frame
+  // (post-point frames have the most stable scoreboard).
+  const matchingFrames = pool.filter(
+    (f) => JSON.stringify(f.sets) === JSON.stringify(majority.frame.sets),
+  );
+  const representative = matchingFrames[matchingFrames.length - 1];
+
+  return { consensus: representative, score_confidence };
 }
 
 function setsEqual(a: [number, number][] | null, b: [number, number][] | null): boolean {
@@ -72,5 +107,6 @@ export function detectScoreDelta(
   if (!isReadable(before) || !isReadable(after)) return null;
   const setsChanged = !setsEqual(before.sets, after.sets);
   const gameScoreChanged = before.game_score !== after.game_score;
-  return setsChanged || gameScoreChanged;
+  const scoreTextChanged = before.score_text !== after.score_text;
+  return setsChanged || gameScoreChanged || scoreTextChanged;
 }
