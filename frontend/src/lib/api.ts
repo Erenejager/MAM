@@ -1,4 +1,13 @@
-import type { Asset, TagCount, CustomField, CustomValue, SearchResponse } from '../types/asset';
+import type {
+  Asset,
+  TagCount,
+  CustomField,
+  CustomValue,
+  SearchResponse,
+  MediaAnalysisResult,
+  MediaAnalysisSummary,
+  MediaAnalysisStatus,
+} from '../types/asset';
 
 const API_BASE = `${import.meta.env.VITE_API_URL || ''}/api`;
 
@@ -208,4 +217,31 @@ export async function fetchMomentTranscript(assetId: string, momentIndex: number
 
 export function getMomentFrameUrl(assetId: string, momentIndex: number, filename: string): string {
   return `${API_BASE}/assets/${assetId}/moments/${momentIndex}/frames/${filename}`;
+}
+
+export async function fetchMediaAnalysisV2Summary(assetId: string): Promise<MediaAnalysisSummary> {
+  const res = await fetch(`${API_BASE}/assets/${assetId}/media-analysis-v2?view=summary`, { credentials: 'include' });
+  if (!res.ok) throw new Error('Media analysis v2 summary not found');
+  return res.json();
+}
+
+export async function fetchMediaAnalysisV2(assetId: string): Promise<MediaAnalysisResult> {
+  const res = await fetch(`${API_BASE}/assets/${assetId}/media-analysis-v2`, { credentials: 'include' });
+  if (!res.ok) throw new Error('Media analysis v2 not found');
+  return res.json();
+}
+
+export async function fetchMediaAnalysisV2Status(assetId: string): Promise<MediaAnalysisStatus> {
+  const res = await fetch(`${API_BASE}/assets/${assetId}/media-analysis-v2?view=status`, { credentials: 'include' });
+  if (!res.ok) throw new Error('Media analysis v2 status not found');
+  return res.json();
+}
+
+export async function runMediaAnalysisV2(assetId: string): Promise<{ id: string; status: string }> {
+  const res = await fetch(`${API_BASE}/assets/${assetId}/media-analysis-v2/run`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error('Failed to queue media analysis v2');
+  return res.json();
 }

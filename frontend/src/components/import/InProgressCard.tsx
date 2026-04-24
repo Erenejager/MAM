@@ -35,8 +35,8 @@ export function InProgressCard({ asset }: InProgressCardProps) {
     if (asset.metadataStatus === 'processing') return 'Extracting metadata...';
     if (asset.thumbnailStatus === 'processing') return 'Generating thumbnail...';
     if (asset.transcriptionStatus === 'processing') return 'Transcribing audio...';
-    if (asset.searchIndexStatus === 'processing') return 'Indexing for search...';
     if (asset.ocrStatus === 'processing') return 'OCR + key moments...';
+    if (asset.searchIndexStatus === 'processing') return 'Indexing for search...';
     return 'Queued...';
   })();
 

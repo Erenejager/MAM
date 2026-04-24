@@ -41,14 +41,22 @@ export function AssetContextMenu({ x, y, onDelete, onClose }: AssetContextMenuPr
   return (
     <div
       ref={menuRef}
-      className="fixed bg-[rgba(20,20,35,0.9)] glass-blur-xl border border-glass-border rounded-lg shadow-lg z-50 py-1 min-w-[160px]"
-      style={{ left: position.x, top: position.y }}
+      className="fixed z-50 min-w-[160px] rounded-[10px] p-[4px]"
+      style={{
+        left: position.x,
+        top: position.y,
+        background: 'rgba(15, 15, 30, 0.97)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+      }}
     >
       <button
-        className="flex items-center gap-2 px-sm py-xs text-sm text-cta hover:bg-cta/10 rounded-md cursor-pointer w-full transition-colors duration-150"
+        className="flex items-center gap-[10px] w-full px-[12px] py-[8px] rounded-[6px] text-[13px] text-cta cursor-pointer transition-colors duration-150 hover:bg-[rgba(225,29,72,0.08)]"
         onClick={onDelete}
       >
-        <Trash2 className="w-4 h-4" />
+        <Trash2 className="w-[14px] h-[14px] opacity-80" />
         Delete
       </button>
     </div>

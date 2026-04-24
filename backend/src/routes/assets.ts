@@ -10,6 +10,14 @@ import { saveAndHash } from '../lib/hash.js';
 import { pipelineQueue } from '../lib/queue.js';
 import { runPipeline } from '../lib/pipeline.js';
 import { opensearchClient } from '../bootstrap/opensearch.js';
+import {
+  loadMediaAnalysisResult,
+  loadMediaAnalysisSummary,
+  loadMediaAnalysisStatus,
+  saveMediaAnalysisStatus,
+} from '../lib/media-analysis-v2/storage.js';
+import { runMediaAnalysisV2 } from '../lib/media-analysis-v2/index.js';
+import { probeVideo } from '../lib/media-analysis-v2/video-utils.js';
 
 export async function assetRoutes(fastify: FastifyInstance): Promise<void> {
   await fastify.register(multipart, {
@@ -313,6 +321,99 @@ export async function assetRoutes(fastify: FastifyInstance): Promise<void> {
     } catch {
       return reply.code(404).send({ error: 'Moment context not found' });
     }
+  });
+
+  /**
+   * GET /api/assets/:id/media-analysis-v2 — serve stored v2 analysis JSON
+   * Query params: view=summary to return compact summary instead of full result
+   */
+  fastify.get<{
+    Params: { id: string };
+    Querystring: { view?: string };
+  }>('/api/assets/:id/media-analysis-v2', async (req, reply) => {
+    const { id } = req.params;
+    const { view } = req.query;
+
+    const asset = db.select().from(assets).where(eq(assets.id, id)).get();
+    if (!asset) {
+      return reply.code(404).send({ error: 'Asset not found' });
+    }
+
+    const assetDir = resolve(process.env.STORAGE_ROOT!, id);
+
+    try {
+      const content = view === 'summary'
+        ? await loadMediaAnalysisSummary(assetDir)
+        : view === 'status'
+          ? await loadMediaAnalysisStatus(assetDir)
+          : await loadMediaAnalysisResult(assetDir);
+      return reply.type('application/json').send(content);
+    } catch {
+      return reply.code(404).send({ error: 'Media analysis v2 not found' });
+    }
+  });
+
+  /**
+   * POST /api/assets/:id/media-analysis-v2/run — trigger v2 analysis for an existing asset
+   * Queues the run and persists status under the asset directory.
+   */
+  fastify.post<{
+    Params: { id: string };
+  }>('/api/assets/:id/media-analysis-v2/run', async (req, reply) => {
+    const { id } = req.params;
+
+    const asset = db.select().from(assets).where(eq(assets.id, id)).get();
+    if (!asset) {
+      return reply.code(404).send({ error: 'Asset not found' });
+    }
+
+    const storageRoot = process.env.STORAGE_ROOT!;
+    const assetDir = resolve(storageRoot, id);
+    const videoPath = resolve(storageRoot, asset.filepath);
+
+    const startedAt = new Date().toISOString();
+    await saveMediaAnalysisStatus(assetDir, {
+      status: 'running',
+      startedAt,
+    });
+
+    pipelineQueue.add(async () => {
+      try {
+        const transcriptFile = resolve(assetDir, 'transcript.json');
+        let segments: { start: number; end: number; text: string }[] = [];
+        try {
+          const raw = await readFile(transcriptFile, 'utf-8');
+          const data = JSON.parse(raw);
+          segments = data.segments ?? data;
+          if (!Array.isArray(segments)) segments = [];
+        } catch {
+          segments = [];
+        }
+
+        const meta = await probeVideo(videoPath);
+        await runMediaAnalysisV2(
+          videoPath,
+          meta.durationSeconds,
+          segments,
+          assetDir,
+        );
+      } catch (err) {
+        await saveMediaAnalysisStatus(assetDir, {
+          status: 'failed',
+          startedAt,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+      }
+    }).catch(async (err) => {
+      req.log.error(err, 'media-analysis-v2 queue job failed');
+      await saveMediaAnalysisStatus(assetDir, {
+        status: 'failed',
+        error: err instanceof Error ? err.message : String(err),
+      }).catch(() => {});
+    });
+
+    return reply.code(202).send({ id, status: 'queued' });
   });
 
   /**

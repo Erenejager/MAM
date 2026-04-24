@@ -84,3 +84,124 @@ export interface SearchResponse {
   results: SearchResult[];
   error?: string;
 }
+
+export interface MediaAnalysisSummary {
+  generatedAt: string;
+  assetProfile: {
+    domain: 'sports' | 'news' | 'mixed' | 'general' | 'unknown';
+    format:
+      | 'live_match'
+      | 'mixed_broadcast'
+      | 'player_interview'
+      | 'press_conference'
+      | 'studio_show'
+      | 'news_package'
+      | 'feature_package'
+      | 'unknown';
+    sport: string | null;
+    competition: string | null;
+    confidence: number;
+  };
+  counts: {
+    segments: number;
+    events: number;
+  };
+  ocrSupportCounts: Array<{ status: 'supports' | 'weak_support' | 'conflicts'; count: number }>;
+  reliabilityCounts: Array<{ bucket: 'top_5' | 'top_10' | 'top_20'; count: number }>;
+  segmentTypes: Array<{ type: string; count: number }>;
+  eventTypes: Array<{ type: string; count: number }>;
+}
+
+export interface MediaAnalysisStatus {
+  status: 'idle' | 'running' | 'complete' | 'failed';
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
+}
+
+interface MediaAnalysisEvidence {
+  type: string;
+  ref: string;
+  confidence?: number;
+  note?: string;
+  status?: 'supports' | 'weak_support' | 'conflicts';
+  metadata?: {
+    label?: string | null;
+    score?: string | null;
+    scoreBefore?: string | null;
+    scoreAfter?: string | null;
+    scoreChanged?: boolean | null;
+    peakTime?: number | null;
+    setPeriod?: string | null;
+    audioEnergy?: number | null;
+  };
+}
+
+export interface MediaAnalysisResult {
+  assetProfile: {
+    domain: 'sports' | 'news' | 'mixed' | 'general' | 'unknown';
+    format:
+      | 'live_match'
+      | 'mixed_broadcast'
+      | 'player_interview'
+      | 'press_conference'
+      | 'studio_show'
+      | 'news_package'
+      | 'feature_package'
+      | 'unknown';
+    sport: string | null;
+    competition: string | null;
+    teams: string[];
+    players: string[];
+    confidence: number;
+    evidence: MediaAnalysisEvidence[];
+  };
+  timelineIndex: {
+    windowSize: number;
+    windows: Array<{
+      index: number;
+      start: number;
+      end: number;
+      transcriptText: string;
+      speechDensity: number;
+      audioEnergy: number;
+      hasQuestionCue: boolean;
+      hasInterviewCue: boolean;
+      hasCommentaryCue: boolean;
+      hasReplayCue: boolean;
+      hasScoreCue: boolean;
+    }>;
+  };
+  segments: Array<{
+    id: string;
+    start: number;
+    end: number;
+    type: string;
+    subtype: string | null;
+    speechMode: string | null;
+    scoreboardPresent: boolean | null;
+    participants: string[];
+    confidence: number;
+    sourceWindowIndexes: number[];
+    evidence: MediaAnalysisEvidence[];
+  }>;
+  events: Array<{
+    id: string;
+    segmentId: string;
+    type: string;
+    label: string;
+    anchorTime: number;
+    peakTime: number | null;
+    startTime: number | null;
+    endTime: number | null;
+    importance: number;
+    confidence: number;
+    entities: string[];
+    evidence: MediaAnalysisEvidence[];
+    parentEventId: string | null;
+    validationStatus?: 'candidate' | 'validated' | 'rejected';
+    relationType?: 'primary' | 'replay_of' | 'commentary_on' | 'quote_from' | 'leads_to' | 'result_of' | 'confirms' | null;
+    ocrSupportStatus?: 'supports' | 'weak_support' | 'conflicts' | null;
+    reliabilityRank?: number | null;
+  }>;
+}

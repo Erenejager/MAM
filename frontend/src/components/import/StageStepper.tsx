@@ -6,8 +6,8 @@ const STAGES: Array<{ field: keyof Asset; label: string }> = [
   { field: 'metadataStatus', label: 'Metadata' },
   { field: 'thumbnailStatus', label: 'Thumbnail' },
   { field: 'transcriptionStatus', label: 'Transcription' },
-  { field: 'searchIndexStatus', label: 'Search index' },
   { field: 'ocrStatus', label: 'OCR' },
+  { field: 'searchIndexStatus', label: 'Search index' },
 ];
 
 function resolveStatus(raw: string): StageStatus {

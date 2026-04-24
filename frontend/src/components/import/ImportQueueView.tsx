@@ -14,12 +14,12 @@ export function ImportQueueView({ onViewAsset }: ImportQueueViewProps) {
   const queryClient = useQueryClient();
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-
-  const hasActivity = inProgress.length > 0 || recentCompleted.length > 0;
+  const [uploadingFileName, setUploadingFileName] = useState<string | null>(null);
 
   const handleFileSelected = useCallback(async (file: File) => {
     setUploadError(null);
     setIsUploading(true);
+    setUploadingFileName(file.name);
 
     const formData = new FormData();
     formData.append('file', file);
@@ -33,8 +33,7 @@ export function ImportQueueView({ onViewAsset }: ImportQueueViewProps) {
       const json = await res.json() as { id?: string; existingId?: string; error?: string };
 
       if (res.status === 202) {
-        // Asset created — will appear in inProgress via query invalidation
-        queryClient.invalidateQueries({ queryKey: ['assets'] });
+        await queryClient.invalidateQueries({ queryKey: ['assets'] });
       } else if (res.status === 409) {
         setUploadError(`Already imported (asset ${json.existingId})`);
       } else {
@@ -44,53 +43,13 @@ export function ImportQueueView({ onViewAsset }: ImportQueueViewProps) {
       setUploadError('Network error — is the server running?');
     } finally {
       setIsUploading(false);
+      setUploadingFileName(null);
     }
   }, [queryClient]);
 
   const handleViewAsset = useCallback((assetId: string) => {
     onViewAsset?.(assetId);
   }, [onViewAsset]);
-
-  // Show large drop zone when no activity
-  if (!hasActivity) {
-    return (
-      <div className="h-full bg-background flex items-center justify-center">
-        <div
-          className="flex flex-col items-center gap-lg p-3xl rounded-xl border border-dashed border-glass-border bg-glass glass-blur cursor-pointer transition-colors duration-200 hover:border-cta/30"
-          style={{ minWidth: 420 }}
-          onClick={() => {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'video/*';
-            input.onchange = (e) => {
-              const file = (e.target as HTMLInputElement).files?.[0];
-              if (file) handleFileSelected(file);
-            };
-            input.click();
-          }}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
-            e.preventDefault();
-            const file = e.dataTransfer.files[0];
-            if (file) handleFileSelected(file);
-          }}
-          role="button"
-          aria-label="Drop video file or click to browse"
-        >
-          <svg
-            className="w-16 h-16 text-text-muted transition-colors"
-            fill="none" viewBox="0 0 48 48" stroke="currentColor" strokeWidth={1.5}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 36H8a4 4 0 0 1-4-4V16a4 4 0 0 1 4-4h32a4 4 0 0 1 4 4v16a4 4 0 0 1-4 4h-4M24 12v24M16 20l8-8 8 8" />
-          </svg>
-          <div className="text-center">
-            <p className="text-text font-sans text-lg font-semibold">Drop video here</p>
-            <p className="text-text-muted font-sans text-sm mt-xs">or click to browse</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="h-full bg-background overflow-y-auto">
@@ -107,6 +66,19 @@ export function ImportQueueView({ onViewAsset }: ImportQueueViewProps) {
           >
             Dismiss
           </button>
+        </div>
+      )}
+
+      {/* Uploading indicator */}
+      {isUploading && uploadingFileName && (
+        <div className="mx-xl mb-md px-md py-sm bg-panel border border-border rounded-[8px] flex items-center gap-[8px]">
+          <svg className="animate-spin h-[14px] w-[14px] text-cta" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <span className="font-sans text-[12px] text-text-muted">
+            Uploading <span className="text-text font-semibold">{uploadingFileName}</span>...
+          </span>
         </div>
       )}
 

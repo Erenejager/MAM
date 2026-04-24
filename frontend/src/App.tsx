@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AppShell } from './components/layout/AppShell';
 import { TopBar } from './components/layout/TopBar';
@@ -35,6 +36,7 @@ export default function App() {
 }
 
 function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
+  const queryClient = useQueryClient();
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [view, setView] = useState<'library' | 'settings' | 'import'>('library');
   const [searchQuery, setSearchQuery] = useState('');
@@ -124,13 +126,14 @@ function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
           credentials: 'include',
         });
         if (res.status === 202) {
+          await queryClient.invalidateQueries({ queryKey: ['assets'] });
           setView('import');
         }
       } finally {
         setIsUploading(false);
       }
     },
-    []
+    [queryClient]
   );
 
   const dropDisabled = isUploading || view === 'import';
