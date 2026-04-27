@@ -68,9 +68,17 @@ function validateEvent(event: Event, context: ValidationContext): Event {
 
     const finalConfidence = Math.min(0.95, Math.max(event.confidence, 0.35 + evidenceStrength));
     const shouldReject =
-      event.type === 'unknown' &&
-      !supportingWindow.hasScoreCue &&
-      supportingWindow.audioEnergy < 0.65;
+      (
+        event.type === 'unknown' &&
+        !supportingWindow.hasScoreCue &&
+        supportingWindow.audioEnergy < 0.65
+      ) ||
+      (
+        supportingWindow.hasReplayCue &&
+        !supportingWindow.hasScoreCue &&
+        event.type !== 'set_won' &&
+        event.type !== 'match_won'
+      );
 
     return {
       ...event,

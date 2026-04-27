@@ -7,6 +7,8 @@ const ROOT_DIR = 'media_analysis_v2';
 const RESULT_FILE = 'result.json';
 const SUMMARY_FILE = 'summary.json';
 const STATUS_FILE = 'status.json';
+const SCORE_TRANSITION_ORDER = ['supports_result', 'supports_state', 'conflicts_result', 'unknown'] as const;
+const OCR_SELECTION_REASON_ORDER = ['transition_match', 'label_match', 'timing_match', 'conflict_match'] as const;
 
 export interface MediaAnalysisStatus {
   status: 'idle' | 'running' | 'complete' | 'failed';
@@ -29,6 +31,14 @@ export interface MediaAnalysisSummary {
     events: number;
   };
   ocrSupportCounts: Array<{ status: 'supports' | 'weak_support' | 'conflicts'; count: number }>;
+  scoreTransitionCounts: Array<{
+    status: 'supports_result' | 'supports_state' | 'conflicts_result' | 'unknown';
+    count: number;
+  }>;
+  selectedByCounts: Array<{
+    reason: 'transition_match' | 'label_match' | 'timing_match' | 'conflict_match';
+    count: number;
+  }>;
   reliabilityCounts: Array<{ bucket: 'top_5' | 'top_10' | 'top_20'; count: number }>;
   segmentTypes: Array<{ type: string; count: number }>;
   eventTypes: Array<{ type: string; count: number }>;
@@ -111,6 +121,24 @@ function buildSummary(
         .map((event) => getOcrSupportStatus(event))
         .filter((status): status is 'supports' | 'weak_support' | 'conflicts' => status != null),
     ),
+    scoreTransitionCounts: countByScoreTransitionStatus(
+      result.events.flatMap((event) =>
+        event.evidence
+          .map((evidence) => evidence.metadata?.scoreTransitionStatus)
+          .filter((status): status is 'supports_result' | 'supports_state' | 'conflicts_result' | 'unknown' =>
+            status != null,
+          ),
+      ),
+    ),
+    selectedByCounts: countByOcrSelectionReason(
+      result.events.flatMap((event) =>
+        event.evidence
+          .map((evidence) => evidence.metadata?.selectedBy)
+          .filter((reason): reason is 'transition_match' | 'label_match' | 'timing_match' | 'conflict_match' =>
+            reason != null,
+          ),
+      ),
+    ),
     reliabilityCounts: countReliabilityBuckets(result.events),
     segmentTypes: countBy(result.segments.map((segment) => segment.type)),
     eventTypes: countBy(result.events.map((event) => event.type)),
@@ -137,6 +165,36 @@ function countByStatus(
   return [...counts.entries()]
     .map(([status, count]) => ({ status, count }))
     .sort((a, b) => b.count - a.count);
+}
+
+function countByScoreTransitionStatus(
+  values: Array<'supports_result' | 'supports_state' | 'conflicts_result' | 'unknown'>,
+): Array<{ status: 'supports_result' | 'supports_state' | 'conflicts_result' | 'unknown'; count: number }> {
+  const counts = new Map<'supports_result' | 'supports_state' | 'conflicts_result' | 'unknown', number>();
+  for (const value of values) {
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([status, count]) => ({ status, count }))
+    .sort((a, b) =>
+      b.count - a.count ||
+      SCORE_TRANSITION_ORDER.indexOf(a.status) - SCORE_TRANSITION_ORDER.indexOf(b.status),
+    );
+}
+
+function countByOcrSelectionReason(
+  values: Array<'transition_match' | 'label_match' | 'timing_match' | 'conflict_match'>,
+): Array<{ reason: 'transition_match' | 'label_match' | 'timing_match' | 'conflict_match'; count: number }> {
+  const counts = new Map<'transition_match' | 'label_match' | 'timing_match' | 'conflict_match', number>();
+  for (const value of values) {
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([reason, count]) => ({ reason, count }))
+    .sort((a, b) =>
+      b.count - a.count ||
+      OCR_SELECTION_REASON_ORDER.indexOf(a.reason) - OCR_SELECTION_REASON_ORDER.indexOf(b.reason),
+    );
 }
 
 function countReliabilityBuckets(
