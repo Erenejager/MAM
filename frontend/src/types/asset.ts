@@ -107,6 +107,14 @@ export interface MediaAnalysisSummary {
     events: number;
   };
   ocrSupportCounts: Array<{ status: 'supports' | 'weak_support' | 'conflicts'; count: number }>;
+  scoreTransitionCounts: Array<{
+    status: 'supports_result' | 'supports_state' | 'conflicts_result' | 'unknown';
+    count: number;
+  }>;
+  selectedByCounts: Array<{
+    reason: 'transition_match' | 'label_match' | 'timing_match' | 'conflict_match';
+    count: number;
+  }>;
   reliabilityCounts: Array<{ bucket: 'top_5' | 'top_10' | 'top_20'; count: number }>;
   segmentTypes: Array<{ type: string; count: number }>;
   eventTypes: Array<{ type: string; count: number }>;

@@ -28,6 +28,8 @@ export interface EvidenceRef {
     scoreBefore?: string | null;
     scoreAfter?: string | null;
     scoreChanged?: boolean | null;
+    scoreTransitionStatus?: 'supports_result' | 'supports_state' | 'conflicts_result' | 'unknown';
+    selectedBy?: 'transition_match' | 'label_match' | 'timing_match' | 'conflict_match';
     peakTime?: number | null;
     setPeriod?: string | null;
     audioEnergy?: number | null;
