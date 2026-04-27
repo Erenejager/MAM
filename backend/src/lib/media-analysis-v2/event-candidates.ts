@@ -47,10 +47,10 @@ export function generateInitialEvents(
             candidate.type,
             assetProfile.players,
           ),
-          anchorTime: midpoint(candidate.window.start, candidate.window.end),
-          peakTime: candidate.window.audioEnergy > 0.75 ? midpoint(candidate.window.start, candidate.window.end) : null,
-          startTime: candidate.window.start,
-          endTime: candidate.window.end,
+          anchorTime: candidate.timing.anchorTime,
+          peakTime: candidate.timing.peakTime,
+          startTime: candidate.timing.startTime,
+          endTime: candidate.timing.endTime,
           importance: Math.round(candidate.window.audioEnergy * 100),
           confidence: candidate.confidence,
           entities: [...assetProfile.players, ...assetProfile.teams],
@@ -102,6 +102,12 @@ interface SportsCandidate {
   type: Event['type'];
   confidence: number;
   labelText: string;
+  timing: {
+    anchorTime: number;
+    peakTime: number | null;
+    startTime: number;
+    endTime: number;
+  };
 }
 
 function buildSportsCandidates(
@@ -164,6 +170,10 @@ function toSportsCandidate(
     return null;
   }
 
+  if (isReplayLikeSportsWindow(window, segmentType, type)) {
+    return null;
+  }
+
   const confidence = type === 'unknown'
     ? (window.hasScoreCue ? 0.62 : 0.5)
     : (window.hasScoreCue ? 0.78 : 0.64);
@@ -173,6 +183,7 @@ function toSportsCandidate(
     type,
     confidence,
     labelText: buildCandidateLabelText(window, type, sport, previousWindow),
+    timing: resolveSportsEventTiming(window, type),
   };
 }
 
@@ -256,7 +267,7 @@ function rewriteTennisLabel(label: string, type: Event['type']): string {
 
   if (type === 'game_won') {
     const leadScore = /\b(?:leads?|lead)\s+([0-7])\s+(?:against|to|-)\s+([0-7])\b/i.exec(label);
-    if (/\bsaved\b.*\bbreak point\b/.test(normalized) && /djokovic/i.test(label) && leadScore) {
+    if (/\b(?:saved|saves)\b.*\bbreak point\b/.test(normalized) && /djokovic/i.test(label) && leadScore) {
       return `Djokovic saves break point and holds for ${leadScore[1]}-${leadScore[2]}`;
     }
 
@@ -541,12 +552,26 @@ function inferTennisTerminalEventType(text: string): Event['type'] | null {
     /\bwins the game\b/.test(text) ||
     /\bgame[, ]+(?:[a-z][a-z'-]+)\b/.test(text) ||
     /\bholds serve\b/.test(text) ||
-    /\bbreaks serve\b/.test(text)
+    /\bbreaks serve\b/.test(text) ||
+    isTennisScoreLeadResultText(text)
   ) {
     return 'game_won';
   }
 
   return null;
+}
+
+function isTennisScoreLeadResultText(text: string): boolean {
+  const hasLeadScore = /\b(?:leads?|lead)\s+([0-7])\s+(?:against|to|-)\s+([0-7])\b/.test(text);
+  if (!hasLeadScore) {
+    return false;
+  }
+
+  return (
+    /\b(?:saved|saves|saving)\b.{0,30}\bbreak point\b/.test(text) ||
+    /\b(?:holds?|held|holding)\b/.test(text) ||
+    /\bbreaks?\b/.test(text)
+  );
 }
 
 function isHistoricalTennisRecordContext(text: string): boolean {
@@ -705,8 +730,152 @@ function isSupportedTennisPointCue(
   return false;
 }
 
+function resolveSportsEventTiming(
+  window: TimelineIndex['windows'][number],
+  type: Event['type'],
+): {
+  anchorTime: number;
+  peakTime: number | null;
+  startTime: number;
+  endTime: number;
+} {
+  const transcriptSegment = selectTimingTranscriptSegment(window, type);
+  const timingBounds = transcriptSegment
+    ? transcriptTimingBounds(window, transcriptSegment)
+    : { startTime: window.start, endTime: window.end };
+  const { startTime, endTime } = timingBounds;
+  const anchorTime = midpoint(startTime, endTime);
+
+  return {
+    anchorTime,
+    peakTime: window.audioEnergy > 0.75 ? anchorTime : null,
+    startTime,
+    endTime,
+  };
+}
+
+function transcriptTimingBounds(
+  window: TimelineIndex['windows'][number],
+  segment: TimelineIndex['windows'][number]['transcriptSegments'][number],
+): {
+  startTime: number;
+  endTime: number;
+} {
+  const clampedStart = Math.max(window.start, segment.start);
+  const clampedEnd = Math.min(window.end, Math.max(clampedStart, segment.end));
+  const clampedDuration = clampedEnd - clampedStart;
+  const segmentDuration = segment.end - segment.start;
+
+  if (clampedDuration >= 0.75 || segmentDuration > 6) {
+    return { startTime: clampedStart, endTime: clampedEnd };
+  }
+
+  return { startTime: segment.start, endTime: segment.end };
+}
+
+function selectTimingTranscriptSegment(
+  window: TimelineIndex['windows'][number],
+  type: Event['type'],
+): TimelineIndex['windows'][number]['transcriptSegments'][number] | null {
+  const candidates = window.transcriptSegments.filter((segment) => segment.text.trim().length > 0);
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  let bestSegment = candidates[0];
+  let bestScore = timingSegmentScore(bestSegment.text, type, window);
+
+  for (const segment of candidates.slice(1)) {
+    const score = timingSegmentScore(segment.text, type, window);
+    if (score > bestScore) {
+      bestSegment = segment;
+      bestScore = score;
+      continue;
+    }
+
+    if (score === bestScore && segment.end - segment.start >= bestSegment.end - bestSegment.start) {
+      bestSegment = segment;
+    }
+  }
+
+  return bestSegment;
+}
+
+function timingSegmentScore(
+  text: string,
+  type: Event['type'],
+  window: TimelineIndex['windows'][number],
+): number {
+  const normalized = text.toLowerCase();
+  let score = tennisLabelScore(text, type);
+
+  if (inferTennisTerminalEventType(normalized) === type) {
+    score += 4;
+  }
+
+  if (type === 'ace' && includesAnyKeyword(normalized, ['ace'])) {
+    score += 4;
+  }
+
+  if (type === 'pressure_state' && isTennisPressureStateCue(normalized)) {
+    score += 3;
+  }
+
+  if (type === 'point_won' && (isStrongTennisPointCue(normalized) || hasTennisCompletedPointCue(normalized))) {
+    score += 3;
+  }
+
+  if (type === 'game_won' && /\b(?:wins the game|game[, ]+[a-z][a-z'-]+|holds serve|breaks serve)\b/.test(normalized)) {
+    score += 3;
+  }
+
+  if (window.hasScoreCue && hasScoreCueLikeText(normalized)) {
+    score += 1;
+  }
+
+  if (includesReplayCue(normalized)) {
+    score -= 4;
+  }
+
+  return score;
+}
+
+function isReplayLikeSportsWindow(
+  window: TimelineIndex['windows'][number],
+  segmentType: SegmentSpan['type'],
+  type: Event['type'],
+): boolean {
+  if (segmentType !== 'live_play' || !window.hasReplayCue) {
+    return false;
+  }
+
+  if (type === 'set_won' || type === 'match_won') {
+    return false;
+  }
+
+  return !window.hasScoreCue;
+}
+
+function includesReplayCue(text: string): boolean {
+  return (
+    text.includes('replay') ||
+    text.includes('take another look') ||
+    text.includes('let us see that again') ||
+    text.includes('again here') ||
+    text.includes('slow motion')
+  );
+}
+
+function hasScoreCueLikeText(text: string): boolean {
+  return (
+    /\b(?:0|15|30|40|ad|advantage)-(?:0|15|30|40|ad|advantage)\b/.test(text) ||
+    /\b[0-7]-[0-7]\b/.test(text) ||
+    /\b(?:break|set|match|game) points?\b/.test(text)
+  );
+}
+
 function midpoint(start: number, end: number): number {
-  return (start + end) / 2;
+  return Number(((start + end) / 2).toFixed(3));
 }
 
 function dedupeEvents(events: Event[]): Event[] {
@@ -743,8 +912,59 @@ function isSemanticDuplicateEvent(a: Event, b: Event): boolean {
   return (
     aLabel.includes(bLabel) ||
     bLabel.includes(aLabel) ||
-    jaccardSimilarity(aLabel, bLabel) >= 0.72
+    jaccardSimilarity(aLabel, bLabel) >= 0.72 ||
+    isRecapStylePointDuplicate(a, b)
   );
+}
+
+function isRecapStylePointDuplicate(a: Event, b: Event): boolean {
+  if (a.type !== 'point_won' || b.type !== 'point_won') {
+    return false;
+  }
+
+  const aLabel = a.label.toLowerCase();
+  const bLabel = b.label.toLowerCase();
+  const aRecap = isRecapStylePointLabel(aLabel);
+  const bRecap = isRecapStylePointLabel(bLabel);
+
+  if (aRecap === bRecap) {
+    return false;
+  }
+
+  const concrete = aRecap ? bLabel : aLabel;
+  const recap = aRecap ? aLabel : bLabel;
+
+  return (
+    hasConcretePointOutcomeLabel(concrete) &&
+    sharesKnownTennisPlayerMention(aLabel, bLabel)
+  ) || (
+    hasConcretePointOutcomeLabel(concrete) &&
+    /\bwhat a point\b/.test(recap)
+  );
+}
+
+function isRecapStylePointLabel(label: string): boolean {
+  return (
+    /\bwhat a point\b/.test(label) ||
+    /\bwhat a rally\b/.test(label) ||
+    /\bthat was\b/.test(label) ||
+    /\bbrilliant from\b/.test(label) ||
+    /\blet us remind ourselves\b/.test(label)
+  );
+}
+
+function hasConcretePointOutcomeLabel(label: string): boolean {
+  return (
+    /\bwins? the point\b/.test(label) ||
+    /\bcomes out on top\b/.test(label) ||
+    /\bwinner\b/.test(label) ||
+    /\bforces? the error\b/.test(label) ||
+    /\bsaved?\b.*\bbreak point\b/.test(label)
+  );
+}
+
+function sharesKnownTennisPlayerMention(aLabel: string, bLabel: string): boolean {
+  return KNOWN_TENNIS_PLAYERS.some((player) => containsName(aLabel, player) && containsName(bLabel, player));
 }
 
 function areSameOrAdjacentSegmentIds(a: string, b: string): boolean {
