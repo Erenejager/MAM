@@ -67,6 +67,8 @@ The result is an end-to-end V2 path that can be run independently of the legacy 
 
 ## Current Status
 
+### 2026-04-20 baseline
+
 What is working:
 
 - V2 runs end to end and persists artifacts.
@@ -81,6 +83,32 @@ What is not done:
 - commentator-driven `analysis_point` events are too dense
 - segment validation still spends too much time on noisy or marginal cases
 - Gemini retries and `503` pressure remain a runtime bottleneck
+
+### 2026-04-27 status
+
+What is done:
+
+- Tennis event taxonomy fully split: `pressure_state`, `point_won`, `game_won`, `set_won`, `match_won`.
+- `analysis_point` collapsed to one per commentator segment, filtered by analysis-strength cues.
+- OCR score-transition confirmation layer live: `supports_result`, `supports_state`, `conflicts_result`, `unknown`.
+- OCR candidate ranking separates selection rank from evidence confidence; `transition_match` boosted, `conflict_match` penalised.
+- Scoped score matching: each event type uses the appropriate score slot.
+- Per-event reliability metadata (`ocrSupportStatus`, `reliabilityRank`) attached for agent use.
+- Regression test suite covers heuristics, OCR confirmation, transition logic, and ranking.
+
+Reference result on asset `3936415e-cded-4b32-a264-03b12a33d73f`:
+
+- `246` segments, `17` events
+- `9 supports`, `3 weak_support`, `0 conflicts`
+- `3 supports_result`, `2 supports_state`, `7 unknown` score transitions
+
+What is not done yet:
+
+- anchor placement and start/end boundary accuracy need improvement
+- result-vs-state classification can still misfire on borderline moments
+- replay/duplicate suppression is partial — same-type semantic dedupe only
+- segment validation volume still high — Gemini `503` pressure remains
+- no audio/crowd signals integrated yet
 
 ## What We Learned From The Latest Tennis Rerun
 
