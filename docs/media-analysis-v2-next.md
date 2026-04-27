@@ -43,6 +43,75 @@ Latest OCR-confidence result:
   - `weak_support` cases stayed flat
   - `0` `conflicts`
 
+Latest OCR score-transition and selection-reason result:
+
+- output: `/tmp/media-analysis-v2-scoped-score-ref/media_analysis_v2/result.json`
+- `17` events
+- `12` OCR-backed events
+- OCR statuses:
+  - `9` `supports`
+  - `3` `weak_support`
+  - `0` `conflicts`
+- score transition metadata:
+  - `2` `supports_result`
+  - `2` `supports_state`
+  - `1` `conflicts_result`
+  - `7` `unknown`
+- OCR selection reason metadata:
+  - `7` `label_match`
+  - `4` `transition_match`
+  - `0` `timing_match`
+  - `1` `conflict_match`
+- event ids, labels, and relations stayed stable
+- OCR evidence notes now include transition hints when score movement is parsed:
+  - `transition=supports_result`
+  - `transition=supports_state`
+  - `transition=conflicts_result`
+- OCR evidence notes now include selection-reason hints:
+  - `selectedBy=transition_match`
+  - `selectedBy=label_match`
+- OCR evidence metadata now exposes `scoreTransitionStatus`
+- OCR evidence metadata now exposes `selectedBy`
+- summary output now exposes `scoreTransitionCounts`
+- summary output now exposes `selectedByCounts`
+- single-score snapshots can now support pressure states or matching result scores when full before/after transitions are unavailable
+- selection-reason metadata is observability only for now; do not use it to hard-reject replay/stale-score cases without a separate weighting pass
+
+Latest OCR ranking result:
+
+- OCR context selection now uses a separate candidate rank, while evidence confidence still reports the support score
+- `transition_match` is preferred over weaker label/timing-only matches when both are plausible
+- `conflict_match` is penalized in selection rank but still attachable as weak support when no better OCR context exists
+- missing score remains neutral, which keeps replay/stale-score use cases graceful
+- reference rerun stayed stable:
+  - `0` selected OCR context changes versus `/tmp/media-analysis-v2-selectedby-summary-ref`
+  - same `246` segments
+  - same `17` events
+  - same `9 supports`, `3 weak_support`, `0 conflicts`
+
+Latest OCR transition-over-label result:
+
+- score transitions can override misleading OCR label wording when the parsed score actually matches the event
+- `set_won` transition parsing is stricter and no longer treats every game-score movement as set-result support
+- reference rerun changed one interpretation without changing the selected OCR context:
+  - `event_8` stayed on `ocr-context:11`
+  - status stayed `weak_support`
+  - transition changed from `supports_result` to `conflicts_result`
+  - selectedBy changed from `transition_match` to `conflict_match`
+- this keeps the stale/replay case graceful: the moment is not rejected, but it is no longer counted as a supporting score transition
+
+Latest OCR scoped score-matching result:
+
+- result-score matching now uses event scope instead of a generic first score:
+  - `game_won` checks the current game score
+  - `set_won` avoids historical set-score support when an active point score is present
+  - `match_won` can match full multi-set snapshots such as `6-3, 6-2`
+- reference rerun stayed stable versus `/tmp/media-analysis-v2-transition-over-label-ref`:
+  - `0` selected OCR context changes
+  - same `246` segments
+  - same `17` events
+  - same `9 supports`, `3 weak_support`, `0 conflicts`
+
 Latest agent-facing reliability change:
 
 - `result.events` should stay chronological
@@ -97,7 +166,8 @@ The next pass should improve:
 - start/end boundaries
 - result-vs-state classification accuracy
 - replay / duplicate suppression
-- stronger confirmation from OCR plus future audio/crowd/score-change signals
+- stronger confirmation from OCR plus future audio/crowd signals
+- score-change parsing beyond the first tennis transition pass
 
 ## Verification
 

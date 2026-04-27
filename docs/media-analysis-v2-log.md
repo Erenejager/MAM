@@ -182,3 +182,100 @@ Decision:
   - timing accuracy
   - boundary accuracy
   - replay/duplicate suppression
+
+OCR score-transition update:
+
+- added tennis score-state parsing inside OCR confirmation:
+  - `scoreBefore`
+  - `scoreAfter`
+  - current `score`
+- OCR evidence can now annotate parsed score movement:
+  - `transition=supports_result`
+  - `transition=supports_state`
+  - `transition=conflicts_result`
+- OCR evidence metadata now includes structured `scoreTransitionStatus`
+- OCR evidence metadata now includes structured `selectedBy`:
+  - `transition_match`
+  - `label_match`
+  - `timing_match`
+  - `conflict_match`
+- summary output now includes `scoreTransitionCounts`
+- summary output now includes `selectedByCounts`
+- pressure-state score recognition now covers `0-40`, `15-40`, `40-0`, and `40-15`
+- single-score snapshots can now support pressure states or matching result scores when full before/after transitions are unavailable
+- result events can be supported by score movement even when the OCR label is generic
+- result events stay weak when nearby OCR score context remains a pressure state
+- this is still observability-first: `selectedBy` explains why OCR evidence was attached, but does not change selection or rejection behavior yet
+
+Verified:
+
+- `npx vitest run src/__tests__/media-analysis-v2.test.ts`
+- `npm run build` in `backend`
+- OCR-aware reference rerun with existing moments symlinked into `/tmp/media-analysis-v2-selectedby-summary-ref`
+
+Latest reference result:
+
+- output: `/tmp/media-analysis-v2-ranked-ocr-ref/media_analysis_v2/result.json`
+- `246` segments
+- `17` events
+- `12` OCR-backed events
+- OCR support:
+  - `9` `supports`
+  - `3` `weak_support`
+  - `0` `conflicts`
+- score transition metadata:
+  - `3` `supports_result`
+  - `2` `supports_state`
+  - `7` `unknown`
+- OCR selection reason metadata:
+  - `7` `label_match`
+  - `5` `transition_match`
+  - `0` `timing_match`
+  - `0` `conflict_match`
+- event ids, labels, timing, and relations stayed stable
+
+OCR ranking update:
+
+- OCR context selection now ranks candidates separately from evidence confidence
+- `transition_match` receives a small selection-rank boost, so real score movement can beat weaker label/timing-only evidence
+- `conflict_match` receives a selection-rank penalty, so stale pressure-score context does not outrank valid non-score OCR evidence
+- missing score remains neutral; label matches can still be selected when no score transition is available
+- stale/conflicting score evidence remains weak support instead of hard rejection
+- reference rerun stayed stable against the previous selected-by run:
+  - `0` selected OCR context changes
+  - same `246` segments
+  - same `17` events
+  - same OCR support and score-transition counts
+
+OCR transition-over-label update:
+
+- true score transitions can now override misleading OCR label wording
+  - example covered by test: event is `set_won`, OCR label says `wins match`, but score moves `5-3 -> 6-3`
+  - result: selected as `transition_match` / `supports_result`
+- set-win transition detection is stricter:
+  - `set_won` no longer treats any game-score movement as a completed set result
+  - it now needs a matching result score, a set-score change, or a terminal point reset
+- reference rerun changed one OCR interpretation:
+  - output: `/tmp/media-analysis-v2-transition-over-label-ref/media_analysis_v2/result.json`
+  - `event_8` stayed attached to `ocr-context:11`
+  - status stayed `weak_support`
+  - transition changed from `supports_result` to `conflicts_result`
+  - selectedBy changed from `transition_match` to `conflict_match`
+  - confidence changed from `0.68` to `0.64`
+- this is expected: the OCR label says `Djokovic wins Set 1 6-3`, but the score context is already Set 2 / `3-6, 2-5 (15-40)`, so it should not be treated as score-transition support for the opening-set event
+
+OCR scoped score-matching update:
+
+- result-score matching now uses event scope instead of a single generic score slot
+  - `game_won` matches the current game score
+  - `set_won` matches a terminal current set/game score, not a historical set score with an active point score
+  - `match_won` can match multi-set score snapshots such as `6-3, 6-2`
+- added regression coverage for:
+  - multi-set match-result OCR snapshots
+  - historical set score plus active point score not supporting a `set_won` event
+- reference rerun stayed stable against the transition-over-label run:
+  - output: `/tmp/media-analysis-v2-scoped-score-ref/media_analysis_v2/result.json`
+  - `0` selected OCR context changes
+  - same `246` segments
+  - same `17` events
+  - same OCR support and score-transition counts
