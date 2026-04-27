@@ -562,6 +562,104 @@ describe('media-analysis-v2 initial events', () => {
     expect(events[0].type).toBe('point_won');
   });
 
+  it('keeps completed tennis point outcomes as point_won even when they produce advantage', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      competition: 'Nitto ATP Finals',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        {
+          index: 0,
+          start: 0,
+          end: 5,
+          transcriptText: 'Brilliant backhand winner from Djokovic to bring up advantage',
+          transcriptSegments: [],
+          speechDensity: 0.48,
+          audioEnergy: 0.82,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+      ],
+    };
+
+    const segments = [{
+      id: 'segment_0',
+      start: 0,
+      end: 5,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.88,
+      sourceWindowIndexes: [0],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('point_won');
+  });
+
+  it('keeps pure advantage transition narration as pressure_state when no completed outcome is stated', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      competition: 'Nitto ATP Finals',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        {
+          index: 0,
+          start: 0,
+          end: 5,
+          transcriptText: 'Advantage Djokovic after saving it',
+          transcriptSegments: [],
+          speechDensity: 0.4,
+          audioEnergy: 0.73,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+      ],
+    };
+
+    const segments = [{
+      id: 'segment_0',
+      start: 0,
+      end: 5,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.88,
+      sourceWindowIndexes: [0],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('pressure_state');
+  });
+
   it('still rejects weak generic tennis narration without score or audio support', () => {
     const tennisProfile: AssetProfile = {
       ...sportsProfile,
@@ -736,6 +834,114 @@ describe('media-analysis-v2 initial events', () => {
     expect(events[0].endTime).toBe(10);
   });
 
+  it('uses transcript segment boundaries to tighten tennis event timing when available', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        {
+          index: 0,
+          start: 0,
+          end: 5,
+          transcriptText: 'Crowd rises. Djokovic wins the point with a forehand winner.',
+          transcriptSegments: [
+            { start: 0.2, end: 1.1, text: 'Crowd rises.' },
+            { start: 2.1, end: 3.7, text: 'Djokovic wins the point with a forehand winner.' },
+          ],
+          speechDensity: 0.48,
+          audioEnergy: 0.86,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+      ],
+    };
+
+    const segments = [{
+      id: 'segment_0',
+      start: 0,
+      end: 5,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.91,
+      sourceWindowIndexes: [0],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('point_won');
+    expect(events[0].startTime).toBe(2.1);
+    expect(events[0].endTime).toBe(3.7);
+    expect(events[0].anchorTime).toBe(2.9);
+    expect(events[0].peakTime).toBe(2.9);
+  });
+
+  it('keeps short transcript timing cues intact when they cross a window boundary', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        {
+          index: 1,
+          start: 5,
+          end: 10,
+          transcriptText: 'Djokovic saves the second break point.',
+          transcriptSegments: [
+            { start: 4.96, end: 5.52, text: 'Djokovic saves the second break point.' },
+          ],
+          speechDensity: 0.45,
+          audioEnergy: 0.78,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+      ],
+    };
+
+    const segments = [{
+      id: 'segment_1',
+      start: 5,
+      end: 10,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.91,
+      sourceWindowIndexes: [1],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('point_won');
+    expect(events[0].startTime).toBe(4.96);
+    expect(events[0].endTime).toBe(5.52);
+    expect(events[0].anchorTime).toBe(5.24);
+  });
+
   it('does not emit analysis_point for weak commentator filler', () => {
     const timelineIndex: TimelineIndex = {
       windowSize: 5,
@@ -772,6 +978,55 @@ describe('media-analysis-v2 initial events', () => {
     }];
 
     const events = generateInitialEvents(sportsProfile, timelineIndex, segments);
+
+    expect(events).toHaveLength(0);
+  });
+
+  it('does not emit a live sports event from replay-style transcript text', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        {
+          index: 0,
+          start: 0,
+          end: 5,
+          transcriptText: 'Take another look at that brilliant point from Djokovic.',
+          transcriptSegments: [
+            { start: 0.8, end: 4.1, text: 'Take another look at that brilliant point from Djokovic.' },
+          ],
+          speechDensity: 0.66,
+          audioEnergy: 0.88,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: true,
+          hasScoreCue: false,
+        },
+      ],
+    };
+
+    const segments = [{
+      id: 'segment_0',
+      start: 0,
+      end: 5,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.86,
+      sourceWindowIndexes: [0],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
 
     expect(events).toHaveLength(0);
   });
@@ -1445,6 +1700,83 @@ describe('media-analysis-v2 initial events', () => {
     expect(events[0].label).toBe('First break points of the evening saved.');
   });
 
+  it('dedupes adjacent recap-style point narration across segments', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        {
+          index: 0,
+          start: 0,
+          end: 5,
+          transcriptText: 'Djokovic wins the point with a brilliant backhand winner',
+          transcriptSegments: [],
+          speechDensity: 0.44,
+          audioEnergy: 0.84,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+        {
+          index: 1,
+          start: 5,
+          end: 10,
+          transcriptText: 'What a point that was from Djokovic, brilliant from the baseline',
+          transcriptSegments: [],
+          speechDensity: 0.43,
+          audioEnergy: 0.8,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+      ],
+    };
+
+    const segments = [
+      {
+        id: 'segment_0',
+        start: 0,
+        end: 5,
+        type: 'live_play' as const,
+        subtype: null,
+        speechMode: 'commentary' as const,
+        scoreboardPresent: true,
+        participants: ['Alcaraz', 'Djokovic'],
+        confidence: 0.9,
+        sourceWindowIndexes: [0],
+        evidence: [],
+      },
+      {
+        id: 'segment_1',
+        start: 5,
+        end: 10,
+        type: 'live_play' as const,
+        subtype: null,
+        speechMode: 'commentary' as const,
+        scoreboardPresent: true,
+        participants: ['Alcaraz', 'Djokovic'],
+        confidence: 0.9,
+        sourceWindowIndexes: [1],
+        evidence: [],
+      },
+    ];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].label).toBe('Djokovic wins the point with a brilliant backhand winner');
+  });
+
   it('focuses tennis labels on the event-bearing sentence', () => {
     const tennisProfile: AssetProfile = {
       ...sportsProfile,
@@ -1764,6 +2096,102 @@ describe('media-analysis-v2 initial events', () => {
       'Three set points for Djokovic',
     ]);
   });
+
+  it('promotes clear hold outcome plus score lead language to game_won without explicit game wording', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        {
+          index: 0,
+          start: 0,
+          end: 5,
+          transcriptText: 'Djokovic saves break point and leads 4 against 2',
+          transcriptSegments: [],
+          speechDensity: 0.46,
+          audioEnergy: 0.81,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+      ],
+    };
+
+    const segments = [{
+      id: 'segment_0',
+      start: 0,
+      end: 5,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [0],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('game_won');
+    expect(events[0].label).toBe('Djokovic saves break point and holds for 4-2');
+  });
+
+  it('keeps generic score-lead narration out of game_won when no outcome language is present', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        {
+          index: 0,
+          start: 0,
+          end: 5,
+          transcriptText: 'Djokovic leads 4 against 2 in this opening set',
+          transcriptSegments: [],
+          speechDensity: 0.42,
+          audioEnergy: 0.77,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+      ],
+    };
+
+    const segments = [{
+      id: 'segment_0',
+      start: 0,
+      end: 5,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [0],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
+
+    expect(events).toHaveLength(0);
+  });
 });
 
 describe('media-analysis-v2 validation and linking', () => {
@@ -2000,12 +2428,377 @@ describe('media-analysis-v2 validation and linking', () => {
       scoreBefore: '5-3',
       scoreAfter: '6-3',
       scoreChanged: true,
+      scoreTransitionStatus: 'supports_result',
       peakTime: 102,
       setPeriod: 'Set 1',
       audioEnergy: 0.82,
     });
     expect(events[0].evidence[1].note).toContain('OCR supports: Djokovic wins Set 1 6-3');
     expect(events[0].evidence[1].note).toContain('score=6-3');
+  });
+
+  it('uses OCR score transitions to support result events when labels are generic', async () => {
+    const assetDir = await mkdtemp(resolve(tmpdir(), 'mam-v2-transition-result-'));
+    const momentDir = resolve(assetDir, 'moments', '0');
+    await mkdir(momentDir, { recursive: true });
+    await writeFile(resolve(momentDir, 'context.json'), JSON.stringify({
+      label: 'Score update after long service game',
+      score: '4-2',
+      scoreBefore: '3-2 (40-30)',
+      scoreAfter: '4-2',
+      scoreChanged: true,
+      peakTime: 102,
+      set_period: 'Set 2',
+      audioEnergy: 0.7,
+    }), 'utf-8');
+
+    const events = await addScoreConfirmationEvidence(assetDir, [{
+      id: 'event_0',
+      segmentId: 'segment_0',
+      type: 'game_won',
+      label: 'Djokovic holds for 4-2',
+      anchorTime: 100,
+      peakTime: null,
+      startTime: 100,
+      endTime: 105,
+      importance: 80,
+      confidence: 0.78,
+      entities: ['Djokovic', 'Alcaraz'],
+      evidence: [{ type: 'transcript', ref: 'window:20' }],
+      parentEventId: null,
+      validationStatus: 'validated',
+      relationType: 'primary',
+    }]);
+
+    expect(events[0].evidence).toHaveLength(2);
+    expect(events[0].evidence[1].status).toBe('supports');
+    expect(events[0].evidence[1].confidence).toBeGreaterThanOrEqual(0.72);
+    expect(events[0].confidence).toBeGreaterThan(0.78);
+    expect(events[0].evidence[1].metadata?.scoreTransitionStatus).toBe('supports_result');
+    expect(events[0].evidence[1].metadata?.selectedBy).toBe('transition_match');
+    expect(events[0].evidence[1].note).toContain('transition=supports_result');
+    expect(events[0].evidence[1].note).toContain('selectedBy=transition_match');
+  });
+
+  it('prefers OCR score-transition matches over nearby label-only context', async () => {
+    const assetDir = await mkdtemp(resolve(tmpdir(), 'mam-v2-rank-transition-'));
+    const closeMomentDir = resolve(assetDir, 'moments', '0');
+    const transitionMomentDir = resolve(assetDir, 'moments', '1');
+    await mkdir(closeMomentDir, { recursive: true });
+    await mkdir(transitionMomentDir, { recursive: true });
+    await writeFile(resolve(closeMomentDir, 'context.json'), JSON.stringify({
+      label: 'Djokovic holds serve',
+      scoreChanged: false,
+      peakTime: 101,
+      set_period: 'Set 2',
+      audioEnergy: 0.7,
+    }), 'utf-8');
+    await writeFile(resolve(transitionMomentDir, 'context.json'), JSON.stringify({
+      label: 'Score update after long service game',
+      score: '4-2',
+      scoreBefore: '3-2 (40-30)',
+      scoreAfter: '4-2',
+      scoreChanged: true,
+      peakTime: 126,
+      set_period: 'Set 2',
+      audioEnergy: 0.7,
+    }), 'utf-8');
+
+    const events = await addScoreConfirmationEvidence(assetDir, [{
+      id: 'event_0',
+      segmentId: 'segment_0',
+      type: 'game_won',
+      label: 'Djokovic holds for 4-2',
+      anchorTime: 100,
+      peakTime: null,
+      startTime: 100,
+      endTime: 105,
+      importance: 80,
+      confidence: 0.78,
+      entities: ['Djokovic', 'Alcaraz'],
+      evidence: [{ type: 'transcript', ref: 'window:20' }],
+      parentEventId: null,
+      validationStatus: 'validated',
+      relationType: 'primary',
+    }]);
+
+    expect(events[0].evidence[1].ref).toBe('ocr-context:1');
+    expect(events[0].evidence[1].metadata?.selectedBy).toBe('transition_match');
+    expect(events[0].evidence[1].metadata?.scoreTransitionStatus).toBe('supports_result');
+  });
+
+  it('does not let stale pressure-score context outrank a valid OCR label match', async () => {
+    const assetDir = await mkdtemp(resolve(tmpdir(), 'mam-v2-rank-stale-score-'));
+    const staleMomentDir = resolve(assetDir, 'moments', '0');
+    const labelMomentDir = resolve(assetDir, 'moments', '1');
+    await mkdir(staleMomentDir, { recursive: true });
+    await mkdir(labelMomentDir, { recursive: true });
+    await writeFile(resolve(staleMomentDir, 'context.json'), JSON.stringify({
+      label: 'Djokovic has break point',
+      score: '3-2 (30-40)',
+      scoreBefore: '3-2 (30-40)',
+      scoreAfter: '3-2 (30-40)',
+      scoreChanged: false,
+      peakTime: 101,
+      set_period: 'Set 2',
+      audioEnergy: 0.82,
+    }), 'utf-8');
+    await writeFile(resolve(labelMomentDir, 'context.json'), JSON.stringify({
+      label: 'Djokovic holds service game',
+      scoreChanged: false,
+      peakTime: 115,
+      set_period: 'Set 2',
+      audioEnergy: 0.68,
+    }), 'utf-8');
+
+    const events = await addScoreConfirmationEvidence(assetDir, [{
+      id: 'event_0',
+      segmentId: 'segment_0',
+      type: 'game_won',
+      label: 'Djokovic holds for 4-2',
+      anchorTime: 100,
+      peakTime: null,
+      startTime: 100,
+      endTime: 105,
+      importance: 80,
+      confidence: 0.78,
+      entities: ['Djokovic', 'Alcaraz'],
+      evidence: [{ type: 'transcript', ref: 'window:20' }],
+      parentEventId: null,
+      validationStatus: 'validated',
+      relationType: 'primary',
+    }]);
+
+    expect(events[0].evidence[1].ref).toBe('ocr-context:1');
+    expect(events[0].evidence[1].metadata?.selectedBy).toBe('label_match');
+    expect(events[0].evidence[1].metadata?.scoreTransitionStatus).toBe('unknown');
+  });
+
+  it('uses OCR point-score transitions to support pressure-state events', async () => {
+    const assetDir = await mkdtemp(resolve(tmpdir(), 'mam-v2-transition-pressure-'));
+    const momentDir = resolve(assetDir, 'moments', '0');
+    await mkdir(momentDir, { recursive: true });
+    await writeFile(resolve(momentDir, 'context.json'), JSON.stringify({
+      label: 'Alcaraz faces break points',
+      score: '4-3 (15-40)',
+      scoreBefore: '4-3 (15-30)',
+      scoreAfter: '4-3 (15-40)',
+      scoreChanged: true,
+      peakTime: 102,
+      set_period: 'Set 1',
+      audioEnergy: 0.76,
+    }), 'utf-8');
+
+    const events = await addScoreConfirmationEvidence(assetDir, [{
+      id: 'event_0',
+      segmentId: 'segment_0',
+      type: 'pressure_state',
+      label: 'Two break points for Djokovic',
+      anchorTime: 100,
+      peakTime: null,
+      startTime: 100,
+      endTime: 105,
+      importance: 76,
+      confidence: 0.78,
+      entities: ['Djokovic', 'Alcaraz'],
+      evidence: [{ type: 'transcript', ref: 'window:20' }],
+      parentEventId: null,
+      validationStatus: 'validated',
+      relationType: 'primary',
+    }]);
+
+    expect(events[0].evidence).toHaveLength(2);
+    expect(events[0].evidence[1].status).toBe('supports');
+    expect(events[0].evidence[1].metadata?.scoreTransitionStatus).toBe('supports_state');
+    expect(events[0].evidence[1].note).toContain('transition=supports_state');
+  });
+
+  it('uses a single OCR pressure-score snapshot to support pressure-state events', async () => {
+    const assetDir = await mkdtemp(resolve(tmpdir(), 'mam-v2-snapshot-pressure-'));
+    const momentDir = resolve(assetDir, 'moments', '0');
+    await mkdir(momentDir, { recursive: true });
+    await writeFile(resolve(momentDir, 'context.json'), JSON.stringify({
+      label: 'Alcaraz earns break points',
+      scoreBefore: '3-6, 2-5 (15-40)',
+      scoreChanged: false,
+      peakTime: 102,
+      set_period: 'Set 2',
+      audioEnergy: 0.66,
+    }), 'utf-8');
+
+    const events = await addScoreConfirmationEvidence(assetDir, [{
+      id: 'event_0',
+      segmentId: 'segment_0',
+      type: 'pressure_state',
+      label: 'Break points for Alcaraz',
+      anchorTime: 100,
+      peakTime: null,
+      startTime: 100,
+      endTime: 105,
+      importance: 72,
+      confidence: 0.78,
+      entities: ['Djokovic', 'Alcaraz'],
+      evidence: [{ type: 'transcript', ref: 'window:20' }],
+      parentEventId: null,
+      validationStatus: 'validated',
+      relationType: 'primary',
+    }]);
+
+    expect(events[0].evidence).toHaveLength(2);
+    expect(events[0].evidence[1].metadata?.scoreTransitionStatus).toBe('supports_state');
+  });
+
+  it('uses a single OCR result-score snapshot to support matching result events', async () => {
+    const assetDir = await mkdtemp(resolve(tmpdir(), 'mam-v2-snapshot-result-'));
+    const momentDir = resolve(assetDir, 'moments', '0');
+    await mkdir(momentDir, { recursive: true });
+    await writeFile(resolve(momentDir, 'context.json'), JSON.stringify({
+      label: 'Scoreboard shows completed service game',
+      score: '4-2',
+      scoreChanged: false,
+      peakTime: 102,
+      set_period: 'Set 2',
+      audioEnergy: 0.7,
+    }), 'utf-8');
+
+    const events = await addScoreConfirmationEvidence(assetDir, [{
+      id: 'event_0',
+      segmentId: 'segment_0',
+      type: 'game_won',
+      label: 'Djokovic holds for 4-2',
+      anchorTime: 100,
+      peakTime: null,
+      startTime: 100,
+      endTime: 105,
+      importance: 80,
+      confidence: 0.78,
+      entities: ['Djokovic', 'Alcaraz'],
+      evidence: [{ type: 'transcript', ref: 'window:20' }],
+      parentEventId: null,
+      validationStatus: 'validated',
+      relationType: 'primary',
+    }]);
+
+    expect(events[0].evidence).toHaveLength(2);
+    expect(events[0].evidence[1].metadata?.scoreTransitionStatus).toBe('supports_result');
+  });
+
+  it('uses multi-set OCR score snapshots to support match result events', async () => {
+    const assetDir = await mkdtemp(resolve(tmpdir(), 'mam-v2-snapshot-match-result-'));
+    const momentDir = resolve(assetDir, 'moments', '0');
+    await mkdir(momentDir, { recursive: true });
+    await writeFile(resolve(momentDir, 'context.json'), JSON.stringify({
+      label: 'Djokovic wins match',
+      score: '6-3, 6-2',
+      scoreChanged: false,
+      peakTime: 102,
+      set_period: 'Set 2',
+      audioEnergy: 0.86,
+    }), 'utf-8');
+
+    const events = await addScoreConfirmationEvidence(assetDir, [{
+      id: 'event_0',
+      segmentId: 'segment_0',
+      type: 'match_won',
+      label: 'Djokovic wins match 6-3, 6-2',
+      anchorTime: 100,
+      peakTime: null,
+      startTime: 100,
+      endTime: 105,
+      importance: 95,
+      confidence: 0.82,
+      entities: ['Djokovic', 'Alcaraz'],
+      evidence: [{ type: 'transcript', ref: 'window:20' }],
+      parentEventId: null,
+      validationStatus: 'validated',
+      relationType: 'primary',
+    }]);
+
+    expect(events[0].evidence).toHaveLength(2);
+    expect(events[0].evidence[1].status).toBe('supports');
+    expect(events[0].evidence[1].metadata?.scoreTransitionStatus).toBe('supports_result');
+    expect(events[0].evidence[1].metadata?.selectedBy).toBe('transition_match');
+  });
+
+  it('does not treat a historical set score plus active point score as set-result support', async () => {
+    const assetDir = await mkdtemp(resolve(tmpdir(), 'mam-v2-historical-set-score-'));
+    const momentDir = resolve(assetDir, 'moments', '0');
+    await mkdir(momentDir, { recursive: true });
+    await writeFile(resolve(momentDir, 'context.json'), JSON.stringify({
+      label: 'Djokovic wins Set 1 6-3',
+      score: '3-6, 2-5 (15-40)',
+      scoreBefore: '5-3',
+      scoreAfter: '3-6, 2-5 (15-40)',
+      scoreChanged: false,
+      peakTime: 102,
+      set_period: 'Set 2',
+      audioEnergy: 0.66,
+    }), 'utf-8');
+
+    const events = await addScoreConfirmationEvidence(assetDir, [{
+      id: 'event_0',
+      segmentId: 'segment_0',
+      type: 'set_won',
+      label: 'Takes opening set 6-3',
+      anchorTime: 100,
+      peakTime: null,
+      startTime: 100,
+      endTime: 105,
+      importance: 80,
+      confidence: 0.78,
+      entities: ['Djokovic', 'Alcaraz'],
+      evidence: [{ type: 'transcript', ref: 'window:20' }],
+      parentEventId: null,
+      validationStatus: 'validated',
+      relationType: 'primary',
+    }]);
+
+    expect(events[0].evidence).toHaveLength(2);
+    expect(events[0].evidence[1].status).toBe('weak_support');
+    expect(events[0].evidence[1].metadata?.scoreTransitionStatus).toBe('conflicts_result');
+    expect(events[0].evidence[1].metadata?.selectedBy).toBe('conflict_match');
+  });
+
+  it('keeps result OCR support weak when score context stays in a pressure state', async () => {
+    const assetDir = await mkdtemp(resolve(tmpdir(), 'mam-v2-transition-conflict-'));
+    const momentDir = resolve(assetDir, 'moments', '0');
+    await mkdir(momentDir, { recursive: true });
+    await writeFile(resolve(momentDir, 'context.json'), JSON.stringify({
+      label: 'Djokovic has break point',
+      score: '3-2 (30-40)',
+      scoreBefore: '3-2 (30-40)',
+      scoreAfter: '3-2 (30-40)',
+      scoreChanged: false,
+      peakTime: 102,
+      set_period: 'Set 2',
+      audioEnergy: 0.82,
+    }), 'utf-8');
+
+    const events = await addScoreConfirmationEvidence(assetDir, [{
+      id: 'event_0',
+      segmentId: 'segment_0',
+      type: 'game_won',
+      label: 'Djokovic holds for 4-2',
+      anchorTime: 100,
+      peakTime: null,
+      startTime: 100,
+      endTime: 105,
+      importance: 80,
+      confidence: 0.78,
+      entities: ['Djokovic', 'Alcaraz'],
+      evidence: [{ type: 'transcript', ref: 'window:20' }],
+      parentEventId: null,
+      validationStatus: 'validated',
+      relationType: 'primary',
+    }]);
+
+    expect(events[0].evidence).toHaveLength(2);
+    expect(events[0].evidence[1].status).toBe('weak_support');
+    expect(events[0].evidence[1].confidence).toBeLessThanOrEqual(0.5);
+    expect(events[0].confidence).toBe(0.78);
+    expect(events[0].evidence[1].metadata?.scoreTransitionStatus).toBe('conflicts_result');
+    expect(events[0].evidence[1].metadata?.selectedBy).toBe('conflict_match');
+    expect(events[0].evidence[1].note).toContain('transition=conflicts_result');
   });
 
   it('marks obvious nearby OCR event-type mismatches as conflicts', async () => {
@@ -2054,6 +2847,46 @@ describe('media-analysis-v2 validation and linking', () => {
       setPeriod: 'Set 2',
     });
     expect(events[0].evidence[1].note).toContain('OCR conflicts: Djokovic wins match');
+  });
+
+  it('trusts a matching OCR score transition over misleading OCR label wording', async () => {
+    const assetDir = await mkdtemp(resolve(tmpdir(), 'mam-v2-transition-over-label-'));
+    const momentDir = resolve(assetDir, 'moments', '0');
+    await mkdir(momentDir, { recursive: true });
+    await writeFile(resolve(momentDir, 'context.json'), JSON.stringify({
+      label: 'Djokovic wins match',
+      score: '6-3',
+      scoreBefore: '5-3',
+      scoreAfter: '6-3',
+      scoreChanged: true,
+      peakTime: 102,
+      set_period: 'Set 1',
+      audioEnergy: 0.8,
+    }), 'utf-8');
+
+    const events = await addScoreConfirmationEvidence(assetDir, [{
+      id: 'event_0',
+      segmentId: 'segment_0',
+      type: 'set_won',
+      label: 'Takes opening set 6-3',
+      anchorTime: 100,
+      peakTime: null,
+      startTime: 100,
+      endTime: 105,
+      importance: 80,
+      confidence: 0.8,
+      entities: ['Djokovic', 'Alcaraz'],
+      evidence: [{ type: 'transcript', ref: 'window:20' }],
+      parentEventId: null,
+      validationStatus: 'validated',
+      relationType: 'primary',
+    }]);
+
+    expect(events[0].evidence).toHaveLength(2);
+    expect(events[0].evidence[1].status).toBe('supports');
+    expect(events[0].evidence[1].metadata?.scoreTransitionStatus).toBe('supports_result');
+    expect(events[0].evidence[1].metadata?.selectedBy).toBe('transition_match');
+    expect(events[0].evidence[1].note).toContain('transition=supports_result');
   });
 
   it('downgrades OCR support when score context fields disagree with the event label', async () => {
@@ -2375,7 +3208,20 @@ describe('media-analysis-v2 ranking and summary', () => {
           entities: ['Djokovic'],
           evidence: [
             { type: 'transcript', ref: 'window:16' },
-            { type: 'ocr_context', ref: 'ocr-context:2', status: 'supports', confidence: 0.95 },
+            {
+              type: 'ocr_context',
+              ref: 'ocr-context:2',
+              status: 'supports',
+              confidence: 0.95,
+              metadata: { scoreTransitionStatus: 'supports_result', selectedBy: 'transition_match' },
+            },
+            {
+              type: 'ocr_context',
+              ref: 'ocr-context:3',
+              status: 'supports',
+              confidence: 0.72,
+              metadata: { scoreTransitionStatus: 'unknown', selectedBy: 'label_match' },
+            },
           ],
           parentEventId: null,
           validationStatus: 'validated',
@@ -2395,7 +3241,13 @@ describe('media-analysis-v2 ranking and summary', () => {
           entities: ['Djokovic'],
           evidence: [
             { type: 'transcript', ref: 'window:8' },
-            { type: 'ocr_context', ref: 'ocr-context:1', status: 'weak_support', confidence: 0.67 },
+            {
+              type: 'ocr_context',
+              ref: 'ocr-context:1',
+              status: 'weak_support',
+              confidence: 0.67,
+              metadata: { scoreTransitionStatus: 'supports_state', selectedBy: 'transition_match' },
+            },
           ],
           parentEventId: null,
           validationStatus: 'validated',
@@ -2414,6 +3266,15 @@ describe('media-analysis-v2 ranking and summary', () => {
     expect(summary.ocrSupportCounts).toEqual([
       { status: 'supports', count: 1 },
       { status: 'weak_support', count: 1 },
+    ]);
+    expect(summary.scoreTransitionCounts).toEqual([
+      { status: 'supports_result', count: 1 },
+      { status: 'supports_state', count: 1 },
+      { status: 'unknown', count: 1 },
+    ]);
+    expect(summary.selectedByCounts).toEqual([
+      { reason: 'transition_match', count: 2 },
+      { reason: 'label_match', count: 1 },
     ]);
     expect(summary.reliabilityCounts).toEqual([
       { bucket: 'top_5', count: 3 },
