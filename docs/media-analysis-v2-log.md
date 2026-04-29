@@ -279,3 +279,38 @@ OCR scoped score-matching update:
   - same `246` segments
   - same `17` events
   - same OCR support and score-transition counts
+
+Tennis boundary / recap suppression update:
+
+- added focused handling for adjacent tennis hold-result wording where the score follows `three holds on the board`
+  - reference wording: `so three holds on the board ... to the bench to 2-1`
+  - resulting event: `Third hold of the set moves score to 2-1`
+- tightened the hold-board matcher so a score that appears before the hold-board wording does not create a false game result
+- added changeover/bench recap suppression for slow-motion/rest coverage after a game result
+- added backward anchoring for game/set/match recaps toward the live pressure or result beat
+- cleaned noisy match-result score text such as `C3 is 2-2, 6-3, 6-2.`
+- verified:
+  - `npx vitest run src/__tests__/media-analysis-v2.test.ts`
+  - `npm run build` in `backend`
+  - OCR-aware reference rerun with existing moments symlinked into `/tmp/media-analysis-v2-ocr-verify-2026-04-28-anchorfix`
+- latest reference result:
+  - output: `/tmp/media-analysis-v2-ocr-verify-2026-04-28-anchorfix/media_analysis_v2/result.json`
+  - `246` segments
+  - `16` events
+  - `11` OCR-backed events
+  - OCR support: `8 supports`, `3 weak_support`, `0 conflicts`
+  - score transition metadata: `2 supports_result`, `2 supports_state`, `1 conflicts_result`, `6 unknown`
+  - selected-by metadata: `6 label_match`, `4 transition_match`, `1 conflict_match`, `0 timing_match`
+- reference comparison versus `/tmp/media-analysis-v2-scoped-score-ref`:
+  - added `game_won` at `12:04`: `Third hold of the set moves score to 2-1`
+  - the `2-1` hold now spans `11:58` to `12:04`; the later bench wording is treated as recap text
+  - changed opening-game break-point saved from `game_won` to `point_won`
+  - removed stale saved-break-point recap: `still can't quite believe...`
+  - removed later recap-only `What a point.`
+  - set result anchor moved from `2467.526` to `2432.5`
+  - `4-2` hold anchor moved from `4566.208` to `4557.168`
+  - third break anchor moved from `4901.295` to `4885.958`
+- remaining caveat:
+  - the new `12:04` hold has no OCR support because the existing OCR context does not cover that interval
+  - compact moment inspection found no OCR moment peaks between `10:50` and `13:00`
+  - nearest later OCR moment is `moment/3` at `14:20`, already into the next game with score `2-1 (0-15)`

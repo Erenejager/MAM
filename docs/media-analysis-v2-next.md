@@ -112,6 +112,40 @@ Latest OCR scoped score-matching result:
   - same `17` events
   - same `9 supports`, `3 weak_support`, `0 conflicts`
 
+Latest tennis boundary / recap suppression result:
+
+- output: `/tmp/media-analysis-v2-ocr-verify-2026-04-28-anchorfix/media_analysis_v2/result.json`
+- `246` segments
+- `16` events
+- `11` OCR-backed events
+- OCR statuses:
+  - `8` `supports`
+  - `3` `weak_support`
+  - `0` `conflicts`
+- score transition metadata:
+  - `2` `supports_result`
+  - `2` `supports_state`
+  - `1` `conflicts_result`
+  - `6` `unknown`
+- OCR selection reason metadata:
+  - `6` `label_match`
+  - `4` `transition_match`
+  - `0` `timing_match`
+  - `1` `conflict_match`
+- key reference behavior:
+  - the hold starts at `11:58`, ends/anchors at `12:04`, and is present as `game_won`: `Third hold of the set moves score to 2-1`
+  - the later `12:34` bench/changeover coverage does not emit a second primary event
+  - the bench mention is treated as recap text and no longer controls the event timing
+  - the `12:04` hold currently has no OCR support because the existing OCR moments do not cover that interval
+    - no OCR moment peaks between `10:50` and `13:00`
+    - nearest later OCR moment is `moment/3` at `14:20`, already into the next game with score `2-1 (0-15)`
+- comparison versus `/tmp/media-analysis-v2-scoped-score-ref`:
+  - opening-game break-point saved changed from `game_won` to `point_won`
+  - stale saved-break-point recap was removed
+  - later `What a point` recap was removed
+  - match-result label is cleaned from `C3 is 2-2, 6-3, 6-2.` to `6-3, 6-2.`
+  - set, hold, and break result anchors moved earlier toward the live pressure/result beats
+
 Latest agent-facing reliability change:
 
 - `result.events` should stay chronological
@@ -168,6 +202,13 @@ The next pass should improve:
 - replay / duplicate suppression
 - stronger confirmation from OCR plus future audio/crowd signals
 - score-change parsing beyond the first tennis transition pass
+
+Confirmed reference case:
+
+- Around `12:04`, Djokovic wins/holds for `2-1`.
+- Around `12:34`, the broadcast shows slow-motion / bench / changeover coverage while players rest between games.
+- The `12:34` coverage should not emit a fresh primary event.
+- Crowd noise / audio energy before the bench coverage should be used as a backward-looking anchor signal: when a changeover/bench recap is detected, look earlier for the likely game-ending crowd peak or score/result beat rather than treating the bench segment as the moment.
 
 ## Verification
 

@@ -2192,6 +2192,523 @@ describe('media-analysis-v2 initial events', () => {
 
     expect(events).toHaveLength(0);
   });
+
+  it('does not emit a second primary event for bench changeover coverage after a tennis game result', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        {
+          index: 0,
+          start: 722,
+          end: 727,
+          transcriptText: 'Game Djokovic, he holds for 2-1 against Alcaraz',
+          transcriptSegments: [],
+          speechDensity: 0.45,
+          audioEnergy: 0.82,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+        {
+          index: 6,
+          start: 752,
+          end: 757,
+          transcriptText: 'Slow motion pictures as Djokovic sits on the bench after he wins the game',
+          transcriptSegments: [],
+          speechDensity: 0.5,
+          audioEnergy: 0.66,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: true,
+          hasScoreCue: true,
+        },
+      ],
+    };
+
+    const segments = [{
+      id: 'segment_0',
+      start: 722,
+      end: 757,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [0, 6],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('game_won');
+    expect(events[0].anchorTime).toBe(724.5);
+    expect(events[0].label).toBe('Game Djokovic, he holds for 2-1 against Alcaraz');
+  });
+
+  it('keeps a tennis hold result when the score follows holds-on-board wording across adjacent windows', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        {
+          index: 145,
+          start: 725,
+          end: 730,
+          transcriptText: 'so three holds on the board to get us going this evening',
+          transcriptSegments: [],
+          speechDensity: 0.48,
+          audioEnergy: 0.56,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: false,
+        },
+        {
+          index: 146,
+          start: 730,
+          end: 735,
+          transcriptText: 'to the bench to 2-1.',
+          transcriptSegments: [
+            {
+              start: 733.4,
+              end: 734.48,
+              text: 'to the bench',
+            },
+            {
+              start: 734.48,
+              end: 735.02,
+              text: 'to 2-1.',
+            },
+          ],
+          speechDensity: 0.32,
+          audioEnergy: 0.36,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: false,
+        },
+        {
+          index: 150,
+          start: 750,
+          end: 755,
+          transcriptText: 'Early calm couple of games after Djokovic',
+          transcriptSegments: [],
+          speechDensity: 0.4,
+          audioEnergy: 0.3,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: false,
+        },
+      ],
+    };
+
+    const segments = [{
+      id: 'segment_0',
+      start: 725,
+      end: 755,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [145, 146, 150],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('game_won');
+    expect(events[0].anchorTime).toBe(724.4);
+    expect(events[0].startTime).toBe(718.4);
+    expect(events[0].endTime).toBe(724.4);
+    expect(events[0].label).toBe('Third hold of the set moves score to 2-1');
+  });
+
+  it('does not treat a score before holds-on-board wording as a new tennis hold result', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        {
+          index: 140,
+          start: 700,
+          end: 705,
+          transcriptText: '1-0 1-0 1-0 40-15',
+          transcriptSegments: [],
+          speechDensity: 0.45,
+          audioEnergy: 0.39,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: false,
+        },
+        {
+          index: 141,
+          start: 705,
+          end: 710,
+          transcriptText: '40-15 so three holds on the board to get us going this evening',
+          transcriptSegments: [],
+          speechDensity: 0.48,
+          audioEnergy: 0.19,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: false,
+        },
+      ],
+    };
+
+    const segments = [{
+      id: 'segment_0',
+      start: 700,
+      end: 710,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [140, 141],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
+
+    expect(events).toHaveLength(0);
+  });
+
+  it('classifies opening-game break-point saved at deuce as point_won, not game_won', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        {
+          index: 0,
+          start: 260,
+          end: 265,
+          transcriptText: 'Opening game break point saved for service.',
+          transcriptSegments: [],
+          speechDensity: 0.42,
+          audioEnergy: 0.8,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+      ],
+    };
+
+    const segments = [{
+      id: 'segment_0',
+      start: 260,
+      end: 265,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [0],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('point_won');
+    expect(events[0].label).toBe('Opening game break point saved for service.');
+  });
+
+  it('anchors a tennis hold to held-serve language instead of the later score recap', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        {
+          index: 0,
+          start: 4526,
+          end: 4531,
+          transcriptText: '30-40. That incredible point.',
+          transcriptSegments: [],
+          speechDensity: 0.46,
+          audioEnergy: 0.78,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+        {
+          index: 4,
+          start: 4544,
+          end: 4559,
+          transcriptText: 'I am not sure how he held serve but he has done',
+          transcriptSegments: [],
+          speechDensity: 0.45,
+          audioEnergy: 0.82,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+        {
+          index: 8,
+          start: 4564,
+          end: 4571,
+          transcriptText: 'the way in which he saved that second break point of the game Djokovic leads 4 against 2',
+          transcriptSegments: [],
+          speechDensity: 0.5,
+          audioEnergy: 0.8,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+      ],
+    };
+
+    const segments = [{
+      id: 'segment_0',
+      start: 4526,
+      end: 4571,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [0, 4, 8],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
+    const gameEvents = events.filter((event) => event.type === 'game_won');
+    const savedBreakPointRecaps = events.filter((event) =>
+      event.label.toLowerCase().includes("still can't quite believe"),
+    );
+
+    expect(gameEvents).toHaveLength(1);
+    expect(gameEvents[0].anchorTime).toBe(4551.5);
+    expect(gameEvents[0].label).toBe('Djokovic saves break point and holds for 4-2');
+    expect(savedBreakPointRecaps).toHaveLength(0);
+  });
+
+  it('anchors a tennis break to the live reaction instead of the later game-from-victory recap', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        {
+          index: 0,
+          start: 4822,
+          end: 4832,
+          transcriptText: '8th break point of the match for Djokovic',
+          transcriptSegments: [],
+          speechDensity: 0.42,
+          audioEnergy: 0.25,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+        {
+          index: 12,
+          start: 4885,
+          end: 4890,
+          transcriptText: 'Oh, mesmerizing stuff. He was everywhere. Yeah.',
+          transcriptSegments: [],
+          speechDensity: 0.35,
+          audioEnergy: 0.86,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: false,
+        },
+        {
+          index: 14,
+          start: 4893,
+          end: 4902,
+          transcriptText: 'Breaks for a third time this evening. A game from victory.',
+          transcriptSegments: [],
+          speechDensity: 0.48,
+          audioEnergy: 0.8,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+        {
+          index: 16,
+          start: 4905,
+          end: 4913,
+          transcriptText: 'What a point. let us remind ourselves of the quality of points we have just seen',
+          transcriptSegments: [],
+          speechDensity: 0.6,
+          audioEnergy: 0.83,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+      ],
+    };
+
+    const segments = [{
+      id: 'segment_0',
+      start: 4822,
+      end: 4832,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [0],
+      evidence: [],
+    }, {
+      id: 'segment_1',
+      start: 4885,
+      end: 4913,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [12, 14, 16],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
+    const gameEvents = events.filter((event) => event.type === 'game_won');
+    const pointEvents = events.filter((event) => event.type === 'point_won');
+
+    expect(gameEvents).toHaveLength(1);
+    expect(gameEvents[0].anchorTime).toBe(4887.5);
+    expect(gameEvents[0].label).toBe('Breaks for a third time; one game from victory');
+    expect(pointEvents).toHaveLength(0);
+  });
+
+  it('keeps final match-point pressure and cleans noisy match-result score text', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        {
+          index: 0,
+          start: 5079,
+          end: 5103,
+          transcriptText: 'three chances to seal it',
+          transcriptSegments: [],
+          speechDensity: 0.34,
+          audioEnergy: 0.7,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+        {
+          index: 18,
+          start: 5169,
+          end: 5180,
+          transcriptText: 'Djokovic, too good in Turin this time. C3 is 2-2, 6-3, 6-2.',
+          transcriptSegments: [],
+          speechDensity: 0.48,
+          audioEnergy: 0.93,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+      ],
+    };
+
+    const segments = [{
+      id: 'segment_0',
+      start: 5079,
+      end: 5180,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [0, 18],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
+
+    expect(events.map((event) => event.type)).toEqual(['pressure_state', 'match_won']);
+    expect(events[0].label).toBe('three chances to seal it');
+    expect(events[1].anchorTime).toBe(5174.5);
+    expect(events[1].label).toBe('Djokovic, too good in Turin this time. 6-3, 6-2.');
+  });
 });
 
 describe('media-analysis-v2 validation and linking', () => {
@@ -2382,6 +2899,54 @@ describe('media-analysis-v2 validation and linking', () => {
     expect(events[2].parentEventId).toBe('event_3');
     expect(events[0].evidence.at(-1)?.type).toBe('heuristic');
     expect(events[2].evidence.at(-1)?.type).toBe('heuristic');
+  });
+
+  it('anchors a set-result recap back to the preceding live set-point state', () => {
+    const events = linkRelatedEvents([
+      {
+        id: 'event_0',
+        segmentId: 'segment_0',
+        type: 'pressure_state',
+        label: 'Three set points for Djokovic',
+        anchorTime: 2432.5,
+        peakTime: null,
+        startTime: 2430,
+        endTime: 2435,
+        importance: 57,
+        confidence: 0.95,
+        entities: ['Djokovic', 'Alcaraz'],
+        evidence: [{ type: 'transcript', ref: 'window:486' }],
+        parentEventId: null,
+        validationStatus: 'validated',
+        relationType: 'primary',
+      },
+      {
+        id: 'event_1',
+        segmentId: 'segment_1',
+        type: 'set_won',
+        label: 'Takes opening set 6-3',
+        anchorTime: 2467.526,
+        peakTime: null,
+        startTime: 2465.0518,
+        endTime: 2470,
+        importance: 39,
+        confidence: 0.64,
+        entities: ['Djokovic', 'Alcaraz'],
+        evidence: [{ type: 'transcript', ref: 'window:493' }],
+        parentEventId: null,
+        validationStatus: 'validated',
+        relationType: 'primary',
+      },
+    ], []);
+
+    expect(events[0].relationType).toBe('leads_to');
+    expect(events[0].parentEventId).toBe('event_1');
+    expect(events[1].type).toBe('set_won');
+    expect(events[1].anchorTime).toBe(2432.5);
+    expect(events[1].startTime).toBe(2430);
+    expect(events[1].endTime).toBe(2435);
+    expect(events[1].evidence.at(-1)?.type).toBe('heuristic');
+    expect(events[1].evidence.at(-1)?.note).toContain('anchored set result to preceding set-point state');
   });
 
   it('adds optional OCR score confirmation evidence when moment context is available', async () => {

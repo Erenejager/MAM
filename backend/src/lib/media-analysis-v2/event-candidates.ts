@@ -94,7 +94,11 @@ export function generateInitialEvents(
     }
   }
 
-  return dedupeEvents(events);
+  const anchoredEvents = assetProfile.sport?.toLowerCase() === 'tennis'
+    ? anchorTennisGameResultRecapsAcrossEvents(events, timelineIndex.windows)
+    : events;
+
+  return dedupeEvents(anchoredEvents);
 }
 
 interface SportsCandidate {
@@ -119,13 +123,19 @@ function buildSportsCandidates(
   const rawCandidates = windows
     .map((window, index) => toSportsCandidate(window, sport, segmentType, participants, windows[index - 1]))
     .filter((candidate): candidate is SportsCandidate => candidate != null);
+  const timingAdjusted = sport?.toLowerCase() === 'tennis'
+    ? anchorTennisResultRecapsToLiveReaction(rawCandidates, windows)
+    : rawCandidates;
+  const filteredCandidates = sport?.toLowerCase() === 'tennis'
+    ? suppressTennisPointRecapsAfterResults(timingAdjusted)
+    : timingAdjusted;
 
-  if (rawCandidates.length <= 1) {
-    return rawCandidates;
+  if (filteredCandidates.length <= 1) {
+    return filteredCandidates;
   }
 
   const collapsed: SportsCandidate[] = [];
-  for (const candidate of rawCandidates) {
+  for (const candidate of filteredCandidates) {
     const previous = collapsed[collapsed.length - 1];
     const isAdjacentDuplicate = previous
       && previous.type === candidate.type
@@ -144,6 +154,126 @@ function buildSportsCandidates(
   return collapsed;
 }
 
+function suppressTennisPointRecapsAfterResults(candidates: SportsCandidate[]): SportsCandidate[] {
+  return candidates.filter((candidate) => {
+    if (candidate.type !== 'point_won' || !isRecapStylePointLabel(candidate.labelText.toLowerCase())) {
+      return true;
+    }
+
+    return !candidates.some((result) =>
+      (result.type === 'game_won' || result.type === 'set_won' || result.type === 'match_won') &&
+      result.window.start <= candidate.window.start &&
+      candidate.window.start - result.window.start <= 30,
+    );
+  });
+}
+
+function anchorTennisResultRecapsToLiveReaction(
+  candidates: SportsCandidate[],
+  windows: TimelineIndex['windows'],
+): SportsCandidate[] {
+  return candidates.map((candidate) => {
+    if (candidate.type !== 'game_won' || !isTennisGameResultRecap(candidate.labelText)) {
+      return candidate;
+    }
+
+    const precedingPressure = [...candidates]
+      .filter((pressure) =>
+        pressure.type === 'pressure_state' &&
+        pressure.window.start < candidate.window.start &&
+        candidate.window.start - pressure.window.start <= 90,
+      )
+      .sort((a, b) => b.window.start - a.window.start)[0];
+
+    if (!precedingPressure) {
+      return candidate;
+    }
+
+    const reactionWindow = [...windows]
+      .filter((window) =>
+        window.start > precedingPressure.window.start &&
+        window.start < candidate.window.start &&
+        candidate.window.start - window.start <= 30 &&
+        isLikelyLiveResultReactionWindow(window),
+      )
+      .sort((a, b) =>
+        b.audioEnergy - a.audioEnergy ||
+        b.start - a.start,
+      )[0];
+
+    if (!reactionWindow) {
+      return candidate;
+    }
+
+    return {
+      ...candidate,
+      window: reactionWindow,
+      timing: resolveSportsEventTiming(reactionWindow, candidate.type),
+    };
+  });
+}
+
+function anchorTennisGameResultRecapsAcrossEvents(
+  events: Event[],
+  windows: TimelineIndex['windows'],
+): Event[] {
+  return events.map((event) => {
+    if (event.type !== 'game_won' || !isTennisGameResultRecap(event.label)) {
+      return event;
+    }
+
+    const precedingPressure = [...events]
+      .filter((candidate) =>
+        candidate.type === 'pressure_state' &&
+        candidate.anchorTime < event.anchorTime &&
+        event.anchorTime - candidate.anchorTime <= 90,
+      )
+      .sort((a, b) => b.anchorTime - a.anchorTime)[0];
+
+    if (!precedingPressure) {
+      return event;
+    }
+
+    const reactionWindow = findLiveResultReactionWindow(
+      windows,
+      precedingPressure.anchorTime,
+      event.anchorTime,
+    );
+
+    if (!reactionWindow) {
+      return event;
+    }
+
+    const timing = resolveSportsEventTiming(reactionWindow, event.type);
+
+    return {
+      ...event,
+      anchorTime: timing.anchorTime,
+      peakTime: timing.peakTime,
+      startTime: timing.startTime,
+      endTime: timing.endTime,
+    };
+  });
+}
+
+function findLiveResultReactionWindow(
+  windows: TimelineIndex['windows'],
+  afterTime: number,
+  beforeTime: number,
+): TimelineIndex['windows'][number] | null {
+  return [...windows]
+    .filter((window) =>
+      window.start > afterTime &&
+      window.start < beforeTime &&
+      beforeTime - window.start <= 30 &&
+      isLikelyLiveResultReactionWindow(window),
+    )
+    .sort((a, b) =>
+      b.audioEnergy - a.audioEnergy ||
+      b.start - a.start,
+    )[0] ?? null;
+}
+
 function toSportsCandidate(
   window: TimelineIndex['windows'][number],
   sport: string | null,
@@ -152,9 +282,14 @@ function toSportsCandidate(
   previousWindow?: TimelineIndex['windows'][number],
 ): SportsCandidate | null {
   const isTennis = sport?.toLowerCase() === 'tennis';
-  const normalized = window.transcriptText.toLowerCase();
+  const tennisContextText = isTennis
+    ? buildTennisCandidateContextText(window, previousWindow)
+    : window.transcriptText;
+  const normalized = tennisContextText.toLowerCase();
   const terminalTennisType = isTennis ? inferTennisTerminalEventType(normalized) : null;
-  const bypassSupportGate = terminalTennisType === 'set_won' || terminalTennisType === 'match_won';
+  const bypassSupportGate = terminalTennisType === 'set_won' ||
+    terminalTennisType === 'match_won' ||
+    (terminalTennisType === 'game_won' && isTennisHoldBoardResultText(normalized));
 
   if (
     !bypassSupportGate &&
@@ -165,7 +300,8 @@ function toSportsCandidate(
     return null;
   }
 
-  const type = inferSportsEventType(window, sport, segmentType, participants);
+  const type = inferSportsEventType(window, sport, segmentType, participants)
+    ?? (isTennis && isTennisHoldBoardResultText(normalized) ? 'game_won' : null);
   if (type == null) {
     return null;
   }
@@ -183,8 +319,43 @@ function toSportsCandidate(
     type,
     confidence,
     labelText: buildCandidateLabelText(window, type, sport, previousWindow),
-    timing: resolveSportsEventTiming(window, type),
+    timing: isTennis && type === 'game_won' && isTennisHoldBoardResultText(normalized)
+      ? resolveTennisHoldBoardRecapTiming(window)
+      : resolveSportsEventTiming(window, type),
   };
+}
+
+function resolveTennisHoldBoardRecapTiming(
+  window: TimelineIndex['windows'][number],
+): {
+  anchorTime: number;
+  peakTime: number | null;
+  startTime: number;
+  endTime: number;
+} {
+  const benchSegment = window.transcriptSegments.find((segment) =>
+    /\b(?:bench|changeover|change over|sit down|sits down|sitting down|chair|chairs|resting)\b/i.test(segment.text),
+  );
+  const recapStart = benchSegment?.start ?? window.start;
+  const anchorTime = Number((recapStart - (benchSegment ? 9 : 6)).toFixed(3));
+
+  return {
+    anchorTime,
+    peakTime: null,
+    startTime: Number((anchorTime - 6).toFixed(3)),
+    endTime: anchorTime,
+  };
+}
+
+function buildTennisCandidateContextText(
+  window: TimelineIndex['windows'][number],
+  previousWindow?: TimelineIndex['windows'][number],
+): string {
+  if (!previousWindow || window.index - previousWindow.index !== 1) {
+    return window.transcriptText;
+  }
+
+  return `${previousWindow.transcriptText} ${window.transcriptText}`;
 }
 
 function buildCandidateLabelText(
@@ -197,11 +368,18 @@ function buildCandidateLabelText(
     sport?.toLowerCase() === 'tennis' &&
     type === 'game_won' &&
     previousWindow &&
-    window.index - previousWindow.index === 1 &&
-    /\bgame from victory\b/i.test(window.transcriptText) &&
-    /\bbreaks?\b/i.test(previousWindow.transcriptText)
+    window.index - previousWindow.index === 1
   ) {
-    return `${previousWindow.transcriptText} ${window.transcriptText}`;
+    const adjacentText = `${previousWindow.transcriptText} ${window.transcriptText}`;
+    if (
+      (
+        /\bgame from victory\b/i.test(window.transcriptText) &&
+        /\bbreaks?\b/i.test(previousWindow.transcriptText)
+      ) ||
+      isTennisHoldBoardResultText(adjacentText.toLowerCase())
+    ) {
+      return adjacentText;
+    }
   }
 
   return window.transcriptText;
@@ -219,6 +397,7 @@ function inferSportsEventType(
     if (isNonParticipantOnlyTennisContext(normalized, participants)) return null;
     if (includesAnyKeyword(normalized, ['ace'])) return 'ace';
     if (isTennisConditionalMatchContextText(normalized)) return null;
+    if (isTennisChangeoverRecapContextText(normalized)) return null;
     const terminalType = inferTennisTerminalEventType(normalized);
     if (terminalType) return terminalType;
     if (isTransitionTennisScoreStateCue(normalized)) return 'pressure_state';
@@ -265,10 +444,22 @@ function buildSportsLabel(
 function rewriteTennisLabel(label: string, type: Event['type']): string {
   const normalized = label.toLowerCase();
 
+  if (type === 'match_won') {
+    const cleaned = cleanNoisyMatchScoreFragments(label);
+    if (cleaned !== label) {
+      return cleaned;
+    }
+  }
+
   if (type === 'game_won') {
     const leadScore = /\b(?:leads?|lead)\s+([0-7])\s+(?:against|to|-)\s+([0-7])\b/i.exec(label);
     if (/\b(?:saved|saves)\b.*\bbreak point\b/.test(normalized) && /djokovic/i.test(label) && leadScore) {
       return `Djokovic saves break point and holds for ${leadScore[1]}-${leadScore[2]}`;
+    }
+
+    const holdBoardScore = /\b([0-7])-([0-7])\b/.exec(label);
+    if (isTennisHoldBoardResultText(normalized) && holdBoardScore) {
+      return `Third hold of the set moves score to ${holdBoardScore[1]}-${holdBoardScore[2]}`;
     }
 
     if (/\bbreaks? for a third time\b/.test(normalized) && /\bgame from victory\b/.test(normalized)) {
@@ -296,6 +487,18 @@ function rewriteTennisLabel(label: string, type: Event['type']): string {
   }
 
   return label;
+}
+
+function cleanNoisyMatchScoreFragments(label: string): string {
+  const setScores = [...label.matchAll(/\b[0-7]-[0-7]\b/g)];
+  if (setScores.length < 2) {
+    return label;
+  }
+
+  return label
+    .replace(/\b[a-z]?\d+\s+(?:is|was|as)\s+[0-7]-[0-7],\s*(?=[0-7]-[0-7]\b)/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function focusTennisLabel(text: string, type: Event['type'], participants: string[]): string {
@@ -550,15 +753,21 @@ function inferTennisTerminalEventType(text: string): Event['type'] | null {
 
   if (
     /\bwins the game\b/.test(text) ||
-    /\bgame[, ]+(?:[a-z][a-z'-]+)\b/.test(text) ||
+    /\bgame[, ]+(?!break\b|set\b|match\b|point\b)(?:[a-z][a-z'-]+)\b/.test(text) ||
     /\bholds serve\b/.test(text) ||
+    /\bheld serve\b/.test(text) ||
     /\bbreaks serve\b/.test(text) ||
+    isTennisHoldBoardResultText(text) ||
     isTennisScoreLeadResultText(text)
   ) {
     return 'game_won';
   }
 
   return null;
+}
+
+function isTennisHoldBoardResultText(text: string): boolean {
+  return /\b(?:three|3)\s+holds?\s+on\s+the\s+board\b.{0,90}\b(?:to\s+(?:the\s+bench\s+)?|score\s+(?:is\s+)?)?[0-7]-[0-7]\b/.test(text);
 }
 
 function isTennisScoreLeadResultText(text: string): boolean {
@@ -572,6 +781,40 @@ function isTennisScoreLeadResultText(text: string): boolean {
     /\b(?:holds?|held|holding)\b/.test(text) ||
     /\bbreaks?\b/.test(text)
   );
+}
+
+function isTennisGameResultRecap(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (
+    /\bbreaks? for a .*time\b/.test(normalized) ||
+    /\bgame from victory\b/.test(normalized) ||
+    (
+      /\b(?:save|saves|saved)\b.*\bbreak point\b/.test(normalized) &&
+      (
+        /\bleads?\b.*\b[0-7]\s+(?:against|to|-)\s+[0-7]\b/.test(normalized) ||
+        /\bholds?\s+for\s+[0-7]-[0-7]\b/.test(normalized)
+      )
+    )
+  );
+}
+
+function isLikelyLiveResultReactionWindow(window: TimelineIndex['windows'][number]): boolean {
+  const normalized = window.transcriptText.toLowerCase();
+  if (window.audioEnergy < 0.78) {
+    return false;
+  }
+
+  if (
+    isTennisGameResultRecap(normalized) ||
+    isLowValueTennisPressureText(normalized) ||
+    isTennisPureStatContextText(normalized) ||
+    isTennisChangeoverRecapContextText(normalized) ||
+    includesReplayCue(normalized)
+  ) {
+    return false;
+  }
+
+  return normalized.trim().length >= 8 && normalized.trim().length <= 90;
 }
 
 function isHistoricalTennisRecordContext(text: string): boolean {
@@ -594,6 +837,7 @@ function isTennisPressureStateCue(text: string): boolean {
   return (
     /\b(?:break|set|match|game) points?\b/.test(text) ||
     /\b(?:break|set|match|game)-points?\b/.test(text) ||
+    /\b(?:two|three|\d+)\s+chances?\s+to\s+seal\s+it\b/.test(text) ||
     isTransitionTennisScoreStateCue(text)
   );
 }
@@ -634,6 +878,14 @@ function isTennisConditionalMatchContextText(text: string): boolean {
     /\b(?:will|would|could|may|might) (?:face|play|meet)\b.*\bif (?:he|she|they) wins? this match\b/.test(text) ||
     /\bif (?:he|she|they) wins? this match\b.*\b(?:will|would|could|may|might) (?:face|play|meet)\b/.test(text)
   );
+}
+
+function isTennisChangeoverRecapContextText(text: string): boolean {
+  const hasChangeoverCue = /\b(?:bench|benches|changeover|change over|sit down|sits down|sitting down|chair|chairs|resting|between games)\b/.test(text);
+  const hasReplayVisualCue = /\b(?:slow motion|slow-mo|pictures?|take another look|replay)\b/.test(text);
+  const hasPastResultCue = /\b(?:after|just before|has just|had just)\b.{0,40}\b(?:wins?|won|holds?|held|game)\b/.test(text);
+
+  return hasChangeoverCue && (hasReplayVisualCue || hasPastResultCue);
 }
 
 function isTennisPureStatContextText(text: string): boolean {
@@ -825,7 +1077,7 @@ function timingSegmentScore(
     score += 3;
   }
 
-  if (type === 'game_won' && /\b(?:wins the game|game[, ]+[a-z][a-z'-]+|holds serve|breaks serve)\b/.test(normalized)) {
+  if (type === 'game_won' && isTennisGameResultTimingCue(normalized)) {
     score += 3;
   }
 
@@ -874,6 +1126,17 @@ function hasScoreCueLikeText(text: string): boolean {
   );
 }
 
+function isTennisGameResultTimingCue(text: string): boolean {
+  return (
+    /\bwins the game\b/.test(text) ||
+    /\bgame[, ]+(?!break\b|set\b|match\b|point\b)(?:[a-z][a-z'-]+)\b/.test(text) ||
+    /\bholds serve\b/.test(text) ||
+    /\bheld serve\b/.test(text) ||
+    /\bbreaks serve\b/.test(text) ||
+    isTennisScoreLeadResultText(text)
+  );
+}
+
 function midpoint(start: number, end: number): number {
   return Number(((start + end) / 2).toFixed(3));
 }
@@ -882,20 +1145,50 @@ function dedupeEvents(events: Event[]): Event[] {
   const deduped: Event[] = [];
 
   for (const event of events) {
-    const duplicate = deduped.find((existing) =>
+    const duplicateIndex = deduped.findIndex((existing) =>
       existing.type === event.type &&
       isSemanticDuplicateEvent(existing, event),
     );
-    if (!duplicate) {
+    if (duplicateIndex === -1) {
       deduped.push(event);
+      continue;
+    }
+
+    const existing = deduped[duplicateIndex];
+    if (shouldPreferDuplicateEvent(event, existing)) {
+      deduped[duplicateIndex] = {
+        ...event,
+        anchorTime: existing.anchorTime,
+        peakTime: existing.peakTime,
+        startTime: existing.startTime,
+        endTime: existing.endTime,
+      };
     }
   }
 
   return deduped;
 }
 
+function shouldPreferDuplicateEvent(candidate: Event, existing: Event): boolean {
+  if (candidate.type !== 'game_won' || existing.type !== 'game_won') {
+    return false;
+  }
+
+  if (!isGameResultRecapDuplicate(candidate, existing)) {
+    return false;
+  }
+
+  return (
+    isTennisGameResultRecap(candidate.label) &&
+    !isTennisGameResultRecap(existing.label)
+  );
+}
+
 function isSemanticDuplicateEvent(a: Event, b: Event): boolean {
-  if (Math.abs(a.anchorTime - b.anchorTime) > 10) {
+  if (
+    Math.abs(a.anchorTime - b.anchorTime) > 10 &&
+    !isGameResultRecapDuplicate(a, b)
+  ) {
     return false;
   }
 
@@ -913,8 +1206,31 @@ function isSemanticDuplicateEvent(a: Event, b: Event): boolean {
     aLabel.includes(bLabel) ||
     bLabel.includes(aLabel) ||
     jaccardSimilarity(aLabel, bLabel) >= 0.72 ||
+    isGameResultRecapDuplicate(a, b) ||
     isRecapStylePointDuplicate(a, b)
   );
+}
+
+function isGameResultRecapDuplicate(a: Event, b: Event): boolean {
+  if (a.type !== 'game_won' || b.type !== 'game_won') {
+    return false;
+  }
+
+  if (Math.abs(a.anchorTime - b.anchorTime) > 25) {
+    return false;
+  }
+
+  const labels = [a.label.toLowerCase(), b.label.toLowerCase()];
+  const hasHoldOutcome = labels.some((label) => /\b(?:holds?|held) serve\b/.test(label));
+  const hasScoreLeadRecap = labels.some((label) =>
+    /\b(?:save|saves|saved)\b.*\bbreak point\b/.test(label) &&
+    (
+      /\bleads?\b.*\b[0-7][ -](?:against|to|-)?\s*[0-7]\b/.test(label) ||
+      /\bholds?\s+for\s+[0-7]-[0-7]\b/.test(label)
+    )
+  );
+
+  return hasHoldOutcome && hasScoreLeadRecap;
 }
 
 function isRecapStylePointDuplicate(a: Event, b: Event): boolean {
@@ -949,6 +1265,8 @@ function isRecapStylePointLabel(label: string): boolean {
     /\bwhat a rally\b/.test(label) ||
     /\bthat was\b/.test(label) ||
     /\bbrilliant from\b/.test(label) ||
+    /\bcan't quite believe\b/.test(label) ||
+    /\bcannot quite believe\b/.test(label) ||
     /\blet us remind ourselves\b/.test(label)
   );
 }

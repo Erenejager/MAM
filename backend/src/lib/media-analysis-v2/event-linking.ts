@@ -28,7 +28,7 @@ export function linkRelatedEvents(
     };
   });
 
-  return linkTennisSequences(segmentLinked);
+  return anchorTennisResultRecaps(linkTennisSequences(segmentLinked));
 }
 
 function inferRelationFromSegment(segment: SegmentSpan): Event['relationType'] {
@@ -110,6 +110,49 @@ function findTennisSequenceLink(
   }
 
   return null;
+}
+
+function anchorTennisResultRecaps(events: Event[]): Event[] {
+  return events.map((event) => {
+    if (
+      event.relationType !== 'primary' ||
+      (event.type !== 'set_won' && event.type !== 'match_won')
+    ) {
+      return event;
+    }
+
+    const pressure = events.find((candidate) =>
+      candidate.relationType === 'leads_to' &&
+      candidate.parentEventId === event.id &&
+      candidate.type === 'pressure_state' &&
+      isCompatiblePressureResult(candidate, event) &&
+      event.anchorTime - candidate.anchorTime > 5 &&
+      event.anchorTime - candidate.anchorTime <= 75,
+    );
+
+    if (!pressure) {
+      return event;
+    }
+
+    const resultName = event.type === 'set_won' ? 'set' : 'match';
+
+    return {
+      ...event,
+      anchorTime: pressure.anchorTime,
+      peakTime: pressure.peakTime,
+      startTime: pressure.startTime,
+      endTime: pressure.endTime,
+      evidence: [
+        ...event.evidence,
+        {
+          type: 'heuristic',
+          ref: `event-anchor:${event.id}->${pressure.id}`,
+          confidence: 0.66,
+          note: `anchored ${resultName} result to preceding ${resultName}-point state`,
+        },
+      ],
+    };
+  });
 }
 
 function isCompatiblePressureResult(pressure: Event, result: Event): boolean {
