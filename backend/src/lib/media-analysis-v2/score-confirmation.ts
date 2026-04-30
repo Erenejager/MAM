@@ -140,6 +140,15 @@ function evaluateOcrSupport(event: Event, context: OcrMomentContext): OcrSupport
   const transitionStatus = evaluateOcrScoreTransition(event, context);
   const selectedBy = classifyOcrSelectionReason(event, context, score, transitionStatus);
 
+  if (isLatePressureLikeContextForAudioLedPoint(event, context, transitionStatus)) {
+    return {
+      score: Math.min(score, 0.45),
+      status: 'weak_support',
+      transitionStatus,
+      selectedBy: 'timing_match',
+    };
+  }
+
   if (hasObviousOcrConflict(event, context) && !isSupportingTransition(transitionStatus)) {
     return {
       score: Math.min(score, 0.35),
@@ -177,6 +186,30 @@ function evaluateOcrSupport(event: Event, context: OcrMomentContext): OcrSupport
 
 function isSupportingTransition(transitionStatus: OcrTransitionStatus): boolean {
   return transitionStatus === 'supports_result' || transitionStatus === 'supports_state';
+}
+
+function isLatePressureLikeContextForAudioLedPoint(
+  event: Event,
+  context: OcrMomentContext,
+  transitionStatus: OcrTransitionStatus,
+): boolean {
+  if (event.type !== 'point_won' || transitionStatus !== 'unknown') {
+    return false;
+  }
+
+  const hasAudioOnlyEvidence = event.evidence.some((entry) => entry.type === 'audio') &&
+    !event.evidence.some((entry) => entry.type === 'transcript' || entry.type === 'ocr_context');
+  if (!hasAudioOnlyEvidence || context.peakTime == null || context.peakTime <= event.anchorTime) {
+    return false;
+  }
+
+  const distance = context.peakTime - event.anchorTime;
+  const snapshot = parseTennisScoreState(context.scoreAfter ?? context.score ?? context.scoreBefore);
+  const contextLabel = (context.label ?? '').toLowerCase();
+  return distance > 20 && (
+    isPressurePointScore(snapshot?.pointScore ?? null) ||
+    /\b(?:break points?|set points?|match points?|advantage)\b/.test(contextLabel)
+  );
 }
 
 function classifyOcrSelectionReason(

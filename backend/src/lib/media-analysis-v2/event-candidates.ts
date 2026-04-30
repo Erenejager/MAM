@@ -1,4 +1,4 @@
-import type { AssetProfile, Event, SegmentSpan, TimelineIndex } from './types.js';
+import type { AssetProfile, AudioPeak, AudioProfileWindowSummary, Event, SegmentSpan, TimelineIndex } from './types.js';
 import { getSportKeywords, includesAnyKeyword } from './sports-keywords.js';
 
 const KNOWN_TENNIS_PLAYERS = [
@@ -25,6 +25,7 @@ export function generateInitialEvents(
   assetProfile: AssetProfile,
   timelineIndex: TimelineIndex,
   segments: SegmentSpan[],
+  audioPeaks: AudioPeak[] = [],
 ): Event[] {
   const events: Event[] = [];
 
@@ -94,11 +95,303 @@ export function generateInitialEvents(
     }
   }
 
+  if (assetProfile.sport?.toLowerCase() === 'tennis') {
+    for (const candidate of buildAudioLedTennisPointCandidates(audioPeaks, timelineIndex, segments, events.length, events)) {
+      events.push(candidate);
+    }
+    for (const candidate of buildReactionLikeTennisCandidates(timelineIndex, segments, events.length, events)) {
+      events.push(candidate);
+    }
+  }
+
   const anchoredEvents = assetProfile.sport?.toLowerCase() === 'tennis'
-    ? anchorTennisGameResultRecapsAcrossEvents(events, timelineIndex.windows)
+    ? anchorTennisSetResultsToReactionLikeCandidates(
+      anchorTennisGameResultRecapsAcrossEvents(events, timelineIndex.windows),
+      timelineIndex,
+    )
     : events;
 
   return dedupeEvents(anchoredEvents);
+}
+
+function buildReactionLikeTennisCandidates(
+  timelineIndex: TimelineIndex,
+  segments: SegmentSpan[],
+  startIndex: number,
+  existingEvents: Event[],
+): Event[] {
+  const summaries = timelineIndex.audioProfile?.summaries.oneSecond ?? [];
+  const candidates: Event[] = [];
+
+  for (const summary of summaries) {
+    if (!isReactionLikeSummary(summary)) continue;
+
+    const anchorTime = summary.strongestAttackTime ?? midpoint(summary.start, summary.end);
+    if (existingEvents.some((event) => Math.abs(event.anchorTime - anchorTime) <= 10)) continue;
+    if (existingEvents.some((event) =>
+      event.type === 'match_won' &&
+      event.anchorTime < anchorTime &&
+      anchorTime - event.anchorTime <= 180,
+    )) {
+      continue;
+    }
+    if (candidates.some((event) => Math.abs(event.anchorTime - anchorTime) <= 10)) continue;
+
+    const segment = segments.find((candidate) =>
+      candidate.type === 'live_play' &&
+      anchorTime >= candidate.start &&
+      anchorTime <= candidate.end,
+    );
+    if (!segment) continue;
+
+    const contextText = transcriptAround(timelineIndex, anchorTime, 18, 20);
+    const normalized = contextText.toLowerCase();
+    if (isSuppressedReactionLikeContext(normalized, summary)) continue;
+
+    const type = inferReactionLikeTennisEventType(normalized, timelineIndex, anchorTime);
+    if (!type) continue;
+
+    candidates.push({
+      id: `event_${startIndex + candidates.length}`,
+      segmentId: segment.id,
+      type,
+      label: buildSportsLabel(contextText, 'tennis', type, segment.participants),
+      anchorTime,
+      peakTime: anchorTime,
+      startTime: Number(Math.max(segment.start, anchorTime - 8).toFixed(3)),
+      endTime: anchorTime,
+      importance: Math.round((summary.rmsEnergy ?? summary.energyMax ?? 0.6) * 100),
+      confidence: type === 'point_won' ? 0.57 : 0.6,
+      entities: segment.participants,
+      evidence: [{
+        type: 'audio',
+        ref: `audio-profile:${summary.windowSize}s:${summary.index}`,
+        confidence: 0.6,
+        note: 'reaction-like tennis candidate from context-adjusted audio profile',
+        metadata: {
+          peakTime: anchorTime,
+          audioEnergy: summary.rmsEnergy,
+        },
+      }, {
+        type: 'transcript',
+        ref: `window:${nearestWindowIndex(timelineIndex, anchorTime)}`,
+      }],
+      parentEventId: null,
+      validationStatus: 'candidate',
+      relationType: null,
+    });
+  }
+
+  return candidates;
+}
+
+function isReactionLikeSummary(summary: AudioProfileWindowSummary): boolean {
+  const context = summary.context;
+  if (!context) return false;
+  if (context.pointShapeHint === 'recap_only') return false;
+  if (context.suppressionReasons.includes('replay_cue') || context.suppressionReasons.includes('music_bed')) return false;
+  if (context.speechDominanceScore >= 0.78) return false;
+
+  return (
+    context.reactionBurstScore >= 0.6 &&
+    context.rallyTextureScore >= 0.45 &&
+    (summary.strongestAttackScore >= 0.08 || summary.burstCount > 0)
+  );
+}
+
+function isSetAnchorReactionLikeSummary(summary: AudioProfileWindowSummary): boolean {
+  const context = summary.context;
+  if (!context) return false;
+  if (context.pointShapeHint === 'recap_only') return false;
+  if (context.suppressionReasons.includes('replay_cue') || context.suppressionReasons.includes('music_bed')) return false;
+  if (context.speechDominanceScore >= 0.78) return false;
+
+  return (
+    context.reactionBurstScore >= 0.5 &&
+    context.rallyTextureScore >= 0.6 &&
+    (summary.strongestAttackScore >= 0.08 || summary.burstCount > 0)
+  );
+}
+
+function isSuppressedReactionLikeContext(
+  text: string,
+  summary: AudioProfileWindowSummary,
+): boolean {
+  if (includesReplayCue(text)) return true;
+  if (/\b(?:animation|graphic|broadcaster|closing montage|post-match|post match)\b/.test(text)) return true;
+  if (/\b(?:three match points|three chances to seal it|match points?)\b/.test(text) && !hasTennisCompletedPointCue(text)) {
+    return true;
+  }
+  if (summary.context?.pointShapeHint === 'recap_only') return true;
+  return false;
+}
+
+function inferReactionLikeTennisEventType(
+  text: string,
+  timelineIndex: TimelineIndex,
+  anchorTime: number,
+): Event['type'] | null {
+  if (/\b[A-Z]?[a-z]+ breaks\b/i.test(text) || /\bbreaks?\b.{0,50}\b(?:game|set|[0-7]-[0-7])\b/.test(text)) {
+    return 'game_won';
+  }
+
+  if (
+    /\b(?:wins?|takes?|claims?|seals?)\b.{0,40}\bset\b/.test(text) ||
+    (
+      hasRecentTennisPressureCue(timelineIndex, anchorTime, /\bset points?\b/) &&
+      /\b(?:closing passage|fans roar|roar|wins? point|takes? it|seals? it|breaks?)\b/.test(text)
+    )
+  ) {
+    return 'set_won';
+  }
+
+  if (hasTennisCompletedPointCue(text) || isStrongTennisPointCue(text)) {
+    return 'point_won';
+  }
+
+  return null;
+}
+
+function buildAudioLedTennisPointCandidates(
+  audioPeaks: AudioPeak[],
+  timelineIndex: TimelineIndex,
+  segments: SegmentSpan[],
+  startIndex: number,
+  existingEvents: Event[],
+): Event[] {
+  const candidates: Event[] = [];
+
+  for (const peak of audioPeaks) {
+    if (!isStrongLiveAudioPointPeak(peak)) continue;
+    if (existingEvents.some((event) => Math.abs(event.anchorTime - peak.peakTime) <= 20)) continue;
+
+    const segment = segments.find((candidate) =>
+      candidate.type === 'live_play' &&
+      peak.peakTime >= candidate.start &&
+      peak.peakTime <= candidate.end,
+    );
+    if (!segment) continue;
+
+    const contextText = transcriptAround(timelineIndex, peak.peakTime, 10, 15);
+    const normalized = contextText.toLowerCase();
+    if (!isLiveAudioLedTennisPointText(normalized)) continue;
+    const replayLike = isReplayOrRecapAudioLedText(normalized);
+    const anchorTime = replayLike
+      ? findReplayBackAnchor(audioPeaks, timelineIndex, peak)
+      : peak.peakTime;
+    if (anchorTime == null) continue;
+
+    candidates.push({
+      id: `event_${startIndex + candidates.length}`,
+      segmentId: segment.id,
+      type: 'point_won',
+      label: buildAudioLedTennisPointLabel(contextText, segment.participants),
+      anchorTime,
+      peakTime: peak.peakTime,
+      startTime: Number(Math.max(segment.start, anchorTime - 8).toFixed(3)),
+      endTime: anchorTime,
+      importance: Math.round(peak.audioEnergy * 100),
+      confidence: 0.58,
+      entities: segment.participants,
+      evidence: [{
+        type: 'audio',
+        ref: `audio-peak:${peak.id}`,
+        confidence: 0.62,
+        note: 'audio-led tennis point candidate from live reaction peak',
+        metadata: {
+          peakTime: peak.peakTime,
+          audioEnergy: peak.audioEnergy,
+          localBaseline: peak.localBaseline,
+          spikeScore: peak.spikeScore,
+          percentileRank: peak.percentileRank,
+          audioPeakShape: peak.shape,
+        },
+      }],
+      parentEventId: null,
+      validationStatus: 'candidate',
+      relationType: null,
+    });
+  }
+
+  return candidates;
+}
+
+function findReplayBackAnchor(
+  audioPeaks: AudioPeak[],
+  timelineIndex: TimelineIndex,
+  replayPeak: AudioPeak,
+): number | null {
+  const previousPeak = [...audioPeaks]
+    .filter((peak) =>
+      peak.peakTime < replayPeak.peakTime &&
+      replayPeak.peakTime - peak.peakTime <= 35 &&
+      peak.shape === 'spike' &&
+      peak.spikeScore >= 0.2,
+    )
+    .sort((a, b) =>
+      b.percentileRank - a.percentileRank ||
+      b.spikeScore - a.spikeScore ||
+      b.peakTime - a.peakTime,
+    )[0];
+
+  if (!previousPeak) {
+    return null;
+  }
+
+  const betweenText = transcriptAround(timelineIndex, previousPeak.peakTime, 0, replayPeak.peakTime - previousPeak.peakTime).toLowerCase();
+  if (isTennisChangeoverRecapContextText(betweenText)) {
+    return null;
+  }
+
+  return previousPeak.peakTime;
+}
+
+function buildAudioLedTennisPointLabel(text: string, participants: string[]): string {
+  const normalized = text.toLowerCase();
+  if (/\b(?:gets? back to 40-40|back to 40-40|back to deuce)\b/.test(normalized)) {
+    const player = participants.find((participant) => containsName(normalized, participant));
+    return player ? `${player} wins rally to return to deuce` : 'Wins rally to return to deuce';
+  }
+
+  return buildSportsLabel(text, 'tennis', 'point_won', participants);
+}
+
+function isStrongLiveAudioPointPeak(peak: AudioPeak): boolean {
+  return peak.shape === 'spike' && peak.percentileRank >= 0.985 && peak.spikeScore >= 0.35;
+}
+
+function isLiveAudioLedTennisPointText(text: string): boolean {
+  const hasReaction = /\b(?:are you kidding me|out of this world|oh my god|unbelievable|incredible|brilliant|sensational|spectacular|what a)\b/.test(text);
+  const hasAction = /\b(?:rally|pass|passing shot|point|forehand|backhand|volley|overhead|return|winner|gets? back to|back to deuce|40-40)\b/.test(text);
+  return hasReaction && hasAction;
+}
+
+function isReplayOrRecapAudioLedText(text: string): boolean {
+  return (
+    includesReplayCue(text) ||
+    /\b(?:this was|that was|take another look|look at that|reaction after|after that last point|let us remind ourselves)\b/.test(text) ||
+    isTennisChangeoverRecapContextText(text)
+  );
+}
+
+function transcriptAround(
+  timelineIndex: TimelineIndex,
+  time: number,
+  beforeSeconds: number,
+  afterSeconds: number,
+): string {
+  return timelineIndex.windows
+    .filter((window) => window.end >= time - beforeSeconds && window.start <= time + afterSeconds)
+    .map((window) => window.transcriptText.trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function nearestWindowIndex(timelineIndex: TimelineIndex, time: number): number {
+  return [...timelineIndex.windows]
+    .sort((a, b) => Math.abs(midpoint(a.start, a.end) - time) - Math.abs(midpoint(b.start, b.end) - time))[0]?.index ?? 0;
 }
 
 interface SportsCandidate {
@@ -152,6 +445,76 @@ function buildSportsCandidates(
   }
 
   return collapsed;
+}
+
+function anchorTennisSetResultsToReactionLikeCandidates(
+  events: Event[],
+  timelineIndex: TimelineIndex,
+): Event[] {
+  const summaries = timelineIndex.audioProfile?.summaries.oneSecond ?? [];
+  if (summaries.length === 0) return events;
+
+  return events.map((event) => {
+    if (event.type !== 'set_won') return event;
+
+    const reactionSummary = summaries
+      .filter((summary) => {
+        const anchorTime = summary.strongestAttackTime ?? midpoint(summary.start, summary.end);
+        return (
+          Math.abs(anchorTime - event.anchorTime) <= 35 &&
+          isSetAnchorReactionLikeSummary(summary)
+        );
+      })
+      .sort((a, b) => reactionLikeSummaryRank(b) - reactionLikeSummaryRank(a))[0];
+
+    if (!reactionSummary) return event;
+    const anchorTime = reactionSummary.strongestAttackTime ?? midpoint(reactionSummary.start, reactionSummary.end);
+    const contextText = transcriptAround(timelineIndex, anchorTime, 20, 10).toLowerCase();
+    if (
+      !hasRecentTennisPressureCue(timelineIndex, anchorTime, /\bset points?\b/) &&
+      !/\b(?:wins?|takes?|claims?|seals?)\b.{0,40}\bset\b/.test(contextText)
+    ) {
+      return event;
+    }
+
+    return {
+      ...event,
+      anchorTime,
+      peakTime: event.peakTime ?? anchorTime,
+      startTime: Number(Math.max(event.startTime ?? event.anchorTime, anchorTime - 8).toFixed(3)),
+      endTime: anchorTime,
+      evidence: [
+        ...event.evidence,
+        {
+          type: 'audio',
+          ref: `audio-profile:${reactionSummary.windowSize}s:${reactionSummary.index}`,
+          confidence: 0.6,
+          note: 'set result anchor adjusted to later reaction-like audio profile candidate',
+          metadata: {
+            peakTime: anchorTime,
+            audioEnergy: reactionSummary.rmsEnergy,
+          },
+        },
+      ],
+    };
+  });
+}
+
+function reactionLikeSummaryRank(summary: AudioProfileWindowSummary): number {
+  return (
+    (summary.context?.reactionBurstScore ?? 0) +
+    (summary.context?.rallyTextureScore ?? 0) * 0.4 +
+    (summary.strongestAttackScore ?? 0)
+  );
+}
+
+function hasRecentTennisPressureCue(
+  timelineIndex: TimelineIndex,
+  time: number,
+  pattern: RegExp,
+): boolean {
+  return transcriptAround(timelineIndex, time, 45, 0).toLowerCase().split(/\s+/).length > 0 &&
+    pattern.test(transcriptAround(timelineIndex, time, 45, 0).toLowerCase());
 }
 
 function suppressTennisPointRecapsAfterResults(candidates: SportsCandidate[]): SportsCandidate[] {

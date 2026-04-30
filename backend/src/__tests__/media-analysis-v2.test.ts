@@ -3,6 +3,10 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { inferPlayersFromTranscript } from '../lib/media-analysis-v2/asset-profile.js';
+import { buildAudioPeakIndex } from '../lib/media-analysis-v2/audio-peaks.js';
+import { addAudioPeakEvidence } from '../lib/media-analysis-v2/audio-evidence.js';
+import { buildAudioReactionEpisodes } from '../lib/media-analysis-v2/audio-reaction-episodes.js';
+import { buildCandidateWindowPackets } from '../lib/media-analysis-v2/candidate-windows.js';
 import { addScoreConfirmationEvidence } from '../lib/media-analysis-v2/score-confirmation.js';
 import { annotateEventReliability } from '../lib/media-analysis-v2/event-reliability.js';
 import { classifySegments } from '../lib/media-analysis-v2/segment-classifier.js';
@@ -12,7 +16,9 @@ import { linkRelatedEvents } from '../lib/media-analysis-v2/event-linking.js';
 import { mergeAdjacentSegments, shouldValidateSegment } from '../lib/media-analysis-v2/segment-validation.js';
 import { hasScoreCue, includesAnyKeyword, inferSportFromText } from '../lib/media-analysis-v2/sports-keywords.js';
 import { loadMediaAnalysisResult, loadMediaAnalysisSummary, saveMediaAnalysisResult } from '../lib/media-analysis-v2/storage.js';
-import type { AssetProfile, MediaAnalysisResult, TimelineIndex } from '../lib/media-analysis-v2/types.js';
+import { applyAudioProfileTimelineContext } from '../lib/media-analysis-v2/timeline-index.js';
+import type { AssetProfile, AudioPeak, AudioProfile, MediaAnalysisResult, TimelineIndex } from '../lib/media-analysis-v2/types.js';
+import { buildAudioProfileFromSamples } from '../lib/media-analysis-v2/video-utils.js';
 
 const sportsProfile: AssetProfile = {
   domain: 'sports',
@@ -24,6 +30,95 @@ const sportsProfile: AssetProfile = {
   confidence: 0.8,
   evidence: [],
 };
+
+function windowWithAudio(index: number, audioEnergy: number): TimelineIndex['windows'][number] {
+  return {
+    index,
+    start: index * 5,
+    end: index * 5 + 5,
+    transcriptText: '',
+    transcriptSegments: [],
+    speechDensity: 0,
+    audioEnergy,
+    hasQuestionCue: false,
+    hasInterviewCue: false,
+    hasCommentaryCue: false,
+    hasReplayCue: false,
+    hasScoreCue: false,
+  };
+}
+
+function audioPeak(overrides: Partial<AudioPeak> = {}): AudioPeak {
+  return {
+    id: 'audio_peak_0',
+    groupId: 'audio_peak_group_0',
+    windowIndex: 0,
+    startTime: 70,
+    endTime: 75,
+    peakTime: 73.5,
+    audioEnergy: 0.83,
+    localBaseline: 0.3,
+    spikeScore: 0.53,
+    percentileRank: 0.99,
+    shape: 'spike',
+    ...overrides,
+  };
+}
+
+function audioProfileForSummaries(
+  summaries: Array<Partial<AudioProfile['summaries']['oneSecond'][number]> & {
+    start: number;
+    end: number;
+  }>,
+): AudioProfile {
+  return {
+    frameSize: 0.5,
+    sampleRate: 8000,
+    frames: [],
+    summaries: {
+      oneSecond: summaries.map((summary, index) => ({
+        index,
+        start: summary.start,
+        end: summary.end,
+        windowSize: 1,
+        rmsEnergy: summary.rmsEnergy ?? 0.75,
+        energyMean: summary.energyMean ?? 0.55,
+        energyMax: summary.energyMax ?? 0.8,
+        energyStdDev: summary.energyStdDev ?? 0.08,
+        burstCount: summary.burstCount ?? 1,
+        onsetRate: summary.onsetRate ?? 1,
+        silenceRatio: summary.silenceRatio ?? 0.2,
+        activeDuration: summary.activeDuration ?? 1,
+        sustainedLoudnessDuration: summary.sustainedLoudnessDuration ?? 0.5,
+        strongestAttackTime: summary.strongestAttackTime ?? summary.start + 0.5,
+        strongestAttackScore: summary.strongestAttackScore ?? 0.16,
+        zeroCrossingRateMean: summary.zeroCrossingRateMean ?? 0.25,
+        onsetRegularity: summary.onsetRegularity ?? 0,
+        rallyTextureScore: summary.rallyTextureScore ?? 0.72,
+        reactionBurstScore: summary.reactionBurstScore ?? 0.72,
+        speechDominanceScore: summary.speechDominanceScore ?? 0.5,
+        musicBedScore: summary.musicBedScore ?? 0.25,
+        umpireAnnouncementScore: summary.umpireAnnouncementScore ?? 0.35,
+        applauseCrowdScore: summary.applauseCrowdScore ?? 0.55,
+        pointShapeHint: summary.pointShapeHint ?? 'short_point',
+        context: summary.context ?? {
+          speechDensity: 0.45,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+          rallyTextureScore: 0.72,
+          reactionBurstScore: 0.72,
+          speechDominanceScore: 0.5,
+          musicBedScore: 0.25,
+          applauseCrowdScore: 0.55,
+          pointShapeHint: 'short_point',
+          suppressionReasons: [],
+        },
+      })),
+      fiveSecond: [],
+    },
+  };
+}
 
 describe('media-analysis-v2 asset profiling', () => {
   it('infers likely tennis participants from transcript frequency while penalizing bracket context', () => {
@@ -40,6 +135,509 @@ describe('media-analysis-v2 asset profiling', () => {
 
   it('does not infer tennis players for non-tennis assets', () => {
     expect(inferPlayersFromTranscript('Djokovic and Alcaraz are mentioned in passing', 'football')).toEqual([]);
+  });
+});
+
+describe('media-analysis-v2 audio peaks', () => {
+  it('builds fine-grained audio profile frames and summaries from PCM samples', () => {
+    const sampleRate = 10;
+    const samples = new Int16Array([
+      0, 0, 0, 0, 0,
+      1000, -1000, 1000, -1000, 1000,
+      4000, -4000, 4000, -4000, 4000,
+      4000, -4000, 4000, -4000, 4000,
+    ]);
+
+    const profile = buildAudioProfileFromSamples(samples, sampleRate, 2, 0.5);
+
+    expect(profile.frameSize).toBe(0.5);
+    expect(profile.sampleRate).toBe(sampleRate);
+    expect(profile.frames).toHaveLength(4);
+    expect(profile.frames[0]).toMatchObject({
+      start: 0,
+      end: 0.5,
+      rmsEnergy: 0,
+      peakEnergy: 0,
+      silenceRatio: 1,
+    });
+    expect(profile.frames[2].rmsEnergy).toBe(1);
+    expect(profile.frames[2].energyDelta).toBeGreaterThan(0.6);
+    expect(profile.frames[2].burstScore).toBeGreaterThan(0.7);
+    expect(profile.frames[2].zeroCrossingRate).toBeGreaterThan(0.5);
+    expect(profile.summaries.oneSecond).toHaveLength(2);
+    expect(profile.summaries.fiveSecond).toHaveLength(1);
+    expect(profile.summaries.oneSecond[1]).toMatchObject({
+      windowSize: 1,
+      rmsEnergy: 1,
+      energyMean: 1,
+      energyMax: 1,
+      burstCount: 1,
+      activeDuration: 1,
+      sustainedLoudnessDuration: 1,
+      strongestAttackTime: 1.25,
+      zeroCrossingRateMean: 0.8,
+      reactionBurstScore: 1,
+      applauseCrowdScore: expect.any(Number),
+      pointShapeHint: expect.any(String),
+    });
+    expect(profile.summaries.oneSecond[1].applauseCrowdScore).toBeGreaterThan(0.8);
+    expect(profile.summaries.fiveSecond[0]).toMatchObject({
+      onsetRegularity: expect.any(Number),
+      rallyTextureScore: expect.any(Number),
+      speechDominanceScore: expect.any(Number),
+      musicBedScore: expect.any(Number),
+      umpireAnnouncementScore: expect.any(Number),
+    });
+  });
+
+  it('adds context-adjusted audio hints without mutating raw signal scores', () => {
+    const sampleRate = 10;
+    const profile = buildAudioProfileFromSamples(new Int16Array([
+      0, 0, 0, 0, 0,
+      1000, -1000, 1000, -1000, 1000,
+      4000, -4000, 4000, -4000, 4000,
+      4000, -4000, 4000, -4000, 4000,
+    ]), sampleRate, 2, 0.5);
+    const rawSummary = profile.summaries.oneSecond[1];
+
+    const contextual = applyAudioProfileTimelineContext(profile, [{
+      ...windowWithAudio(0, 0.8),
+      start: 1,
+      end: 2,
+      speechDensity: 1,
+      transcriptText: 'take another look at that brilliant pass in slow motion',
+      hasCommentaryCue: true,
+      hasReplayCue: true,
+    }]);
+
+    const summary = contextual.summaries.oneSecond[1];
+    expect(summary.rallyTextureScore).toBe(rawSummary.rallyTextureScore);
+    expect(summary.reactionBurstScore).toBe(rawSummary.reactionBurstScore);
+    expect(summary.context).toMatchObject({
+      speechDensity: 1,
+      hasCommentaryCue: true,
+      hasReplayCue: true,
+      pointShapeHint: 'recap_only',
+      suppressionReasons: expect.arrayContaining(['high_speech_density', 'commentary_cue', 'replay_cue']),
+    });
+    expect(summary.context?.rallyTextureScore).toBeLessThan(summary.rallyTextureScore);
+    expect(summary.context?.speechDominanceScore).toBeGreaterThan(summary.speechDominanceScore);
+  });
+
+  it('detects grouped local audio peaks with baseline and shape metadata', () => {
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        windowWithAudio(0, 0.1),
+        windowWithAudio(1, 0.2),
+        windowWithAudio(2, 0.82),
+        windowWithAudio(3, 0.22),
+        windowWithAudio(4, 0.18),
+        windowWithAudio(5, 0.2),
+        windowWithAudio(6, 0.76),
+        windowWithAudio(7, 0.78),
+        windowWithAudio(8, 0.77),
+        windowWithAudio(9, 0.76),
+        windowWithAudio(10, 0.2),
+      ],
+    };
+
+    const peaks = buildAudioPeakIndex(timelineIndex);
+
+    expect(peaks).toHaveLength(2);
+    expect(peaks[0]).toMatchObject({
+      id: 'audio_peak_0',
+      groupId: 'audio_peak_group_0',
+      windowIndex: 2,
+      peakTime: 12.5,
+      audioEnergy: 0.82,
+      shape: 'spike',
+    });
+    expect(peaks[0].localBaseline).toBe(0.2);
+    expect(peaks[0].spikeScore).toBe(0.62);
+    expect(peaks[1]).toMatchObject({
+      id: 'audio_peak_1',
+      groupId: 'audio_peak_group_1',
+      windowIndex: 7,
+      shape: 'sustained',
+    });
+  });
+
+  it('attaches nearby audio peak evidence to existing events without changing type or anchor', () => {
+    const events = addAudioPeakEvidence([
+      {
+        id: 'event_0',
+        segmentId: 'segment_0',
+        type: 'point_won',
+        label: 'Djokovic wins a rally',
+        anchorTime: 73.5,
+        peakTime: null,
+        startTime: 68,
+        endTime: 74,
+        importance: 80,
+        confidence: 0.78,
+        entities: ['Djokovic'],
+        evidence: [{ type: 'transcript', ref: 'window:14' }],
+        parentEventId: null,
+        validationStatus: 'validated',
+        relationType: 'primary',
+      },
+    ], [
+      {
+        id: 'audio_peak_0',
+        groupId: 'audio_peak_group_0',
+        windowIndex: 14,
+        startTime: 70,
+        endTime: 75,
+        peakTime: 73.5,
+        audioEnergy: 0.83,
+        localBaseline: 0.3,
+        spikeScore: 0.53,
+        percentileRank: 0.99,
+        shape: 'spike',
+      },
+    ]);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('point_won');
+    expect(events[0].anchorTime).toBe(73.5);
+    expect(events[0].peakTime).toBe(73.5);
+    expect(events[0].evidence.at(-1)).toMatchObject({
+      type: 'audio',
+      ref: 'audio-peak:audio_peak_0',
+      metadata: {
+        peakTime: 73.5,
+        audioEnergy: 0.83,
+        audioPeakShape: 'spike',
+      },
+    });
+  });
+});
+
+describe('media-analysis-v2 candidate window packets', () => {
+  it('represents replay during changeover as multiple facets on one packet', () => {
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [{
+        index: 14,
+        start: 70,
+        end: 75,
+        transcriptText: 'Slow motion now, take another look while the players sit down at the changeover after that spectacular rally.',
+        transcriptSegments: [],
+        speechDensity: 0.8,
+        audioEnergy: 0.85,
+        hasQuestionCue: false,
+        hasInterviewCue: false,
+        hasCommentaryCue: true,
+        hasReplayCue: true,
+        hasScoreCue: false,
+      }],
+    };
+    const segments = [{
+      id: 'segment_0',
+      start: 70,
+      end: 75,
+      type: 'replay' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: false,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.86,
+      sourceWindowIndexes: [14],
+      evidence: [],
+    }];
+
+    const packets = buildCandidateWindowPackets(timelineIndex, segments, [
+      audioPeak({ windowIndex: 14, startTime: 70, endTime: 75, peakTime: 72.5 }),
+    ], []);
+
+    expect(packets).toHaveLength(1);
+    expect(packets[0]).toMatchObject({
+      source: 'audio_peak',
+      sourceRef: 'audio-peak:audio_peak_0',
+      segmentId: 'segment_0',
+      scoreboardPresent: false,
+      speechDensity: 0.8,
+      audioSourceHint: 'crowd_or_reaction',
+      priority: 'medium',
+      facets: {
+        playPhase: 'changeover_or_break',
+        contentMode: 'replay_or_slow_motion',
+        transcriptRelation: 'previous_action_recap',
+      },
+    });
+  });
+
+  it('keeps stale transcript during next-point setup as boundary evidence', () => {
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [{
+        index: 280,
+        start: 1400,
+        end: 1405,
+        transcriptText: 'Djokovic ready to serve at advantage after that brilliant overhead winner.',
+        transcriptSegments: [],
+        speechDensity: 0.7,
+        audioEnergy: 0.78,
+        hasQuestionCue: false,
+        hasInterviewCue: false,
+        hasCommentaryCue: true,
+        hasReplayCue: false,
+        hasScoreCue: true,
+      }],
+    };
+    const segments = [{
+      id: 'segment_0',
+      start: 1400,
+      end: 1405,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [280],
+      evidence: [],
+    }];
+
+    const packets = buildCandidateWindowPackets(timelineIndex, segments, [
+      audioPeak({ windowIndex: 280, startTime: 1400, endTime: 1405, peakTime: 1402.5 }),
+    ], []);
+
+    expect(packets).toHaveLength(1);
+    expect(packets[0]).toMatchObject({
+      priority: 'medium',
+      facets: {
+        playPhase: 'between_points',
+        contentMode: 'live_view',
+        transcriptRelation: 'next_point_setup',
+      },
+      scoreboardPresent: true,
+      speechDensity: 0.7,
+      audioSourceHint: 'crowd_or_reaction',
+    });
+  });
+
+  it('marks speech-heavy low-spike audio packets as speech or commentary', () => {
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [{
+        index: 893,
+        start: 4465,
+        end: 4470,
+        transcriptText: 'just anticipated the pass and he made it count',
+        transcriptSegments: [],
+        speechDensity: 0.9,
+        audioEnergy: 0.69,
+        hasQuestionCue: false,
+        hasInterviewCue: false,
+        hasCommentaryCue: true,
+        hasReplayCue: false,
+        hasScoreCue: false,
+      }],
+    };
+    const segments = [{
+      id: 'segment_0',
+      start: 4465,
+      end: 4470,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: null,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [893],
+      evidence: [],
+    }];
+
+    const packets = buildCandidateWindowPackets(timelineIndex, segments, [
+      audioPeak({
+        id: 'audio_peak_81',
+        windowIndex: 893,
+        startTime: 4465,
+        endTime: 4470,
+        peakTime: 4467.5,
+        audioEnergy: 0.686,
+        localBaseline: 0.53,
+        spikeScore: 0.156,
+        percentileRank: 0.959,
+      }),
+    ], [{
+      id: 'event_0',
+      segmentId: 'segment_0',
+      type: 'pressure_state',
+      label: 'Break points',
+      anchorTime: 4468,
+      peakTime: null,
+      startTime: 4467,
+      endTime: 4470,
+      importance: 60,
+      confidence: 0.78,
+      entities: ['Alcaraz', 'Djokovic'],
+      evidence: [{ type: 'transcript', ref: 'window:893' }],
+      parentEventId: null,
+      validationStatus: 'validated',
+      relationType: 'primary',
+    }]);
+
+    expect(packets[0]).toMatchObject({
+      speechDensity: 0.9,
+      audioSourceHint: 'speech_or_commentary',
+    });
+  });
+});
+
+describe('media-analysis-v2 audio reaction episodes', () => {
+  it('keeps the first strong reaction peak as primary when a later speech bump is nearby', () => {
+    const peaks = [
+      audioPeak({
+        id: 'audio_peak_0',
+        windowIndex: 887,
+        startTime: 4435,
+        endTime: 4440,
+        peakTime: 4437.5,
+        audioEnergy: 0.83,
+        localBaseline: 0.301,
+        spikeScore: 0.529,
+        percentileRank: 0.994,
+        shape: 'spike',
+      }),
+      audioPeak({
+        id: 'audio_peak_1',
+        groupId: 'audio_peak_group_1',
+        windowIndex: 893,
+        startTime: 4465,
+        endTime: 4470,
+        peakTime: 4467.5,
+        audioEnergy: 0.686,
+        localBaseline: 0.53,
+        spikeScore: 0.156,
+        percentileRank: 0.959,
+        shape: 'spike',
+      }),
+    ];
+    const packets = [
+      {
+        id: 'candidate_window_0',
+        source: 'audio_peak' as const,
+        sourceRef: 'audio-peak:audio_peak_0',
+        startTime: 4422.5,
+        endTime: 4457.5,
+        anchorTime: 4437.5,
+        priority: 'high' as const,
+        facets: {
+          playPhase: 'live_reaction' as const,
+          contentMode: 'live_view' as const,
+          transcriptRelation: 'current_action' as const,
+        },
+        segmentId: 'segment_0',
+        segmentType: 'live_play' as const,
+        scoreboardPresent: true,
+        speechDensity: 0.35,
+        audioSourceHint: 'crowd_or_reaction' as const,
+        nearbyTranscript: 'What a point from Alcaraz.',
+        linkedEventIds: ['event_0'],
+        previousEventId: null,
+        evidence: [{ type: 'audio' as const, ref: 'audio-peak:audio_peak_0' }],
+      },
+      {
+        id: 'candidate_window_1',
+        source: 'audio_peak' as const,
+        sourceRef: 'audio-peak:audio_peak_1',
+        startTime: 4452.5,
+        endTime: 4487.5,
+        anchorTime: 4467.5,
+        priority: 'high' as const,
+        facets: {
+          playPhase: 'live_action' as const,
+          contentMode: 'live_view' as const,
+          transcriptRelation: 'generic' as const,
+        },
+        segmentId: 'segment_1',
+        segmentType: 'live_play' as const,
+        scoreboardPresent: true,
+        speechDensity: 1,
+        audioSourceHint: 'speech_or_commentary' as const,
+        nearbyTranscript: 'Just anticipated the pass and he made it count.',
+        linkedEventIds: ['event_1'],
+        previousEventId: 'event_0',
+        evidence: [{ type: 'audio' as const, ref: 'audio-peak:audio_peak_1' }],
+      },
+    ];
+
+    const episodes = buildAudioReactionEpisodes(peaks, packets);
+
+    expect(episodes).toHaveLength(1);
+    expect(episodes[0]).toMatchObject({
+      primaryCandidateWindowId: 'candidate_window_0',
+      primaryAudioPeakId: 'audio_peak_0',
+      primaryAnchorTime: 4437.5,
+      primaryReason: 'first_strong_reaction',
+      memberCount: 2,
+      members: [
+        {
+          candidateWindowId: 'candidate_window_0',
+          role: 'primary_anchor',
+          audioSourceHint: 'crowd_or_reaction',
+        },
+        {
+          candidateWindowId: 'candidate_window_1',
+          role: 'recap_or_speech_tail',
+          audioSourceHint: 'speech_or_commentary',
+        },
+      ],
+    });
+  });
+
+  it('falls back to the best available peak when no strong reaction anchor exists', () => {
+    const peaks = [
+      audioPeak({
+        id: 'audio_peak_0',
+        peakTime: 120,
+        spikeScore: 0.16,
+        percentileRank: 0.96,
+        shape: 'spike',
+      }),
+      audioPeak({
+        id: 'audio_peak_1',
+        groupId: 'audio_peak_group_1',
+        peakTime: 145,
+        spikeScore: 0.22,
+        percentileRank: 0.97,
+        shape: 'spike',
+      }),
+    ];
+    const packets = peaks.map((peak, index) => ({
+      id: `candidate_window_${index}`,
+      source: 'audio_peak' as const,
+      sourceRef: `audio-peak:${peak.id}`,
+      startTime: peak.peakTime - 15,
+      endTime: peak.peakTime + 20,
+      anchorTime: peak.peakTime,
+      priority: 'medium' as const,
+      facets: {
+        playPhase: 'live_action' as const,
+        contentMode: 'live_view' as const,
+        transcriptRelation: 'generic' as const,
+      },
+      segmentId: null,
+      segmentType: null,
+      scoreboardPresent: null,
+      speechDensity: 0.8,
+      audioSourceHint: 'mixed_or_unknown' as const,
+      nearbyTranscript: '',
+      linkedEventIds: [],
+      previousEventId: null,
+      evidence: [{ type: 'audio' as const, ref: `audio-peak:${peak.id}` }],
+    }));
+
+    const episodes = buildAudioReactionEpisodes(peaks, packets);
+
+    expect(episodes).toHaveLength(1);
+    expect(episodes[0]).toMatchObject({
+      primaryAudioPeakId: 'audio_peak_1',
+      primaryReason: 'best_available_peak',
+    });
   });
 });
 
@@ -700,6 +1298,519 @@ describe('media-analysis-v2 initial events', () => {
       participants: ['Alcaraz', 'Djokovic'],
       confidence: 0.88,
       sourceWindowIndexes: [0],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
+
+    expect(events).toHaveLength(0);
+  });
+
+  it('emits an audio-led tennis point for a clean live rally ending', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        {
+          index: 14,
+          start: 70,
+          end: 75,
+          transcriptText: 'Oh my God, are you kidding me? How good is this game? Djokovic anticipated the pass and gets back to 40-40.',
+          transcriptSegments: [],
+          speechDensity: 0.5,
+          audioEnergy: 0.83,
+          hasQuestionCue: true,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: false,
+        },
+      ],
+    };
+
+    const segments = [{
+      id: 'segment_0',
+      start: 70,
+      end: 75,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [14],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments, [
+      audioPeak({ windowIndex: 14, startTime: 70, endTime: 75, peakTime: 73.5 }),
+    ]);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('point_won');
+    expect(events[0].label).toBe('Djokovic wins rally to return to deuce');
+    expect(events[0].anchorTime).toBe(73.5);
+    expect(events[0].startTime).toBe(70);
+    expect(events[0].endTime).toBe(73.5);
+    expect(events[0].evidence[0]).toMatchObject({
+      type: 'audio',
+      ref: 'audio-peak:audio_peak_0',
+    });
+  });
+
+  it('back-anchors slow-motion audio peaks to the earlier live point ending', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        {
+          index: 13,
+          start: 65,
+          end: 70,
+          transcriptText: 'Alcaraz absorbs it and turns the point in his favour.',
+          transcriptSegments: [],
+          speechDensity: 0.45,
+          audioEnergy: 0.81,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: false,
+        },
+        {
+          index: 14,
+          start: 70,
+          end: 75,
+          transcriptText: 'Slow motion now, take another look at that spectacular rally from Alcaraz.',
+          transcriptSegments: [],
+          speechDensity: 0.55,
+          audioEnergy: 0.85,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: true,
+          hasScoreCue: false,
+        },
+      ],
+    };
+
+    const segments = [{
+      id: 'segment_0',
+      start: 65,
+      end: 75,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: null,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [13, 14],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments, [
+      audioPeak({
+        id: 'audio_peak_0',
+        windowIndex: 13,
+        startTime: 65,
+        endTime: 70,
+        peakTime: 69.5,
+        audioEnergy: 0.81,
+        spikeScore: 0.31,
+        percentileRank: 0.97,
+      }),
+      audioPeak({
+        id: 'audio_peak_1',
+        groupId: 'audio_peak_group_1',
+        windowIndex: 14,
+        startTime: 70,
+        endTime: 75,
+        peakTime: 72.5,
+        audioEnergy: 0.85,
+        spikeScore: 0.54,
+        percentileRank: 0.99,
+      }),
+    ]);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('point_won');
+    expect(events[0].anchorTime).toBe(69.5);
+    expect(events[0].peakTime).toBe(72.5);
+    expect(events[0].endTime).toBe(69.5);
+  });
+
+  it('does not add a replay-backed audio point when a nearby live event already exists', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        {
+          index: 13,
+          start: 65,
+          end: 70,
+          transcriptText: 'What a rally from Alcaraz, he wins the point with a forehand winner.',
+          transcriptSegments: [],
+          speechDensity: 0.55,
+          audioEnergy: 0.81,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+        {
+          index: 14,
+          start: 70,
+          end: 75,
+          transcriptText: 'Slow motion now, take another look at that spectacular rally from Alcaraz.',
+          transcriptSegments: [],
+          speechDensity: 0.55,
+          audioEnergy: 0.85,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: true,
+          hasScoreCue: false,
+        },
+      ],
+    };
+
+    const segments = [{
+      id: 'segment_0',
+      start: 65,
+      end: 75,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [13, 14],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments, [
+      audioPeak({
+        id: 'audio_peak_0',
+        windowIndex: 13,
+        startTime: 65,
+        endTime: 70,
+        peakTime: 69.5,
+        audioEnergy: 0.81,
+        spikeScore: 0.31,
+        percentileRank: 0.97,
+      }),
+      audioPeak({
+        id: 'audio_peak_1',
+        groupId: 'audio_peak_group_1',
+        windowIndex: 14,
+        startTime: 70,
+        endTime: 75,
+        peakTime: 72.5,
+        audioEnergy: 0.85,
+        spikeScore: 0.54,
+        percentileRank: 0.99,
+      }),
+    ]);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('point_won');
+    expect(events[0].anchorTime).not.toBe(72.5);
+  });
+
+  it('keeps the manually reviewed 37:48 reaction-like break exception as game_won', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [{
+        index: 454,
+        start: 2268,
+        end: 2273,
+        transcriptText: 'Djokovic breaks. The first to make a move. Great game from Alcaraz but disappointing miss to concede the break.',
+        transcriptSegments: [],
+        speechDensity: 0.55,
+        audioEnergy: 0.58,
+        hasQuestionCue: false,
+        hasInterviewCue: false,
+        hasCommentaryCue: true,
+        hasReplayCue: false,
+        hasScoreCue: false,
+      }],
+      audioProfile: audioProfileForSummaries([{
+        start: 2268,
+        end: 2269,
+        strongestAttackTime: 2268.6,
+      }]),
+    };
+    const segments = [{
+      id: 'segment_0',
+      start: 2268,
+      end: 2273,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [454],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: 'game_won',
+      anchorTime: 2268.6,
+    });
+    expect(events[0].label).toContain('Djokovic breaks');
+  });
+
+  it('keeps the manually reviewed 40:54 reaction-like set-ending exception anchored to the live point', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [
+        {
+          index: 486,
+          start: 2430,
+          end: 2435,
+          transcriptText: 'Three set points for Djokovic.',
+          transcriptSegments: [],
+          speechDensity: 0.45,
+          audioEnergy: 0.7,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+        {
+          index: 491,
+          start: 2455,
+          end: 2460,
+          transcriptText: 'Really good closing passage of play from Djokovic in that opening set.',
+          transcriptSegments: [],
+          speechDensity: 0.55,
+          audioEnergy: 0.62,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: false,
+        },
+        {
+          index: 492,
+          start: 2460,
+          end: 2465,
+          transcriptText: 'He takes the opening set 6-3.',
+          transcriptSegments: [],
+          speechDensity: 0.5,
+          audioEnergy: 0.58,
+          hasQuestionCue: false,
+          hasInterviewCue: false,
+          hasCommentaryCue: true,
+          hasReplayCue: false,
+          hasScoreCue: true,
+        },
+      ],
+      audioProfile: audioProfileForSummaries([{
+        start: 2454,
+        end: 2455,
+        strongestAttackTime: 2454.5,
+      }]),
+    };
+    const segments = [{
+      id: 'segment_0',
+      start: 2430,
+      end: 2465,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [486, 491, 492],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
+    const setWon = events.find((event) => event.type === 'set_won');
+
+    expect(setWon).toMatchObject({
+      anchorTime: 2454.5,
+      peakTime: 2454.5,
+    });
+    expect(setWon?.evidence.some((evidence) => evidence.ref === 'audio-profile:1s:0')).toBe(true);
+  });
+
+  it('does not promote reviewed between-points match-point setup to a result event', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [{
+        index: 1020,
+        start: 5100,
+        end: 5105,
+        transcriptText: 'Three chances to seal it. Three match points. Fans roar before Djokovic serves.',
+        transcriptSegments: [],
+        speechDensity: 0.6,
+        audioEnergy: 0.78,
+        hasQuestionCue: false,
+        hasInterviewCue: false,
+        hasCommentaryCue: true,
+        hasReplayCue: false,
+        hasScoreCue: true,
+      }],
+      audioProfile: audioProfileForSummaries([{
+        start: 5101,
+        end: 5102,
+        strongestAttackTime: 5101.4,
+      }]),
+    };
+    const segments = [{
+      id: 'segment_0',
+      start: 5100,
+      end: 5105,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [1020],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('pressure_state');
+  });
+
+  it('does not infer a point winner from an unreviewed reaction-like pressure candidate before OCR', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [{
+        index: 956,
+        start: 4780,
+        end: 4785,
+        transcriptText: 'Eighth break point of the match for Djokovic. Was on the return, just missed it.',
+        transcriptSegments: [],
+        speechDensity: 0.25,
+        audioEnergy: 0.74,
+        hasQuestionCue: false,
+        hasInterviewCue: false,
+        hasCommentaryCue: true,
+        hasReplayCue: false,
+        hasScoreCue: true,
+      }],
+      audioProfile: audioProfileForSummaries([{
+        start: 4780,
+        end: 4781,
+        strongestAttackTime: 4780.4,
+      }]),
+    };
+    const segments = [{
+      id: 'segment_0',
+      start: 4780,
+      end: 4785,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: true,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [956],
+      evidence: [],
+    }];
+
+    const events = generateInitialEvents(tennisProfile, timelineIndex, segments);
+
+    expect(events.every((event) => event.type !== 'point_won')).toBe(true);
+    expect(events.every((event) => event.type !== 'game_won')).toBe(true);
+    expect(events.every((event) => event.type !== 'set_won')).toBe(true);
+  });
+
+  it('suppresses reviewed post-match broadcaster animation as a live key moment', () => {
+    const tennisProfile: AssetProfile = {
+      ...sportsProfile,
+      sport: 'Tennis',
+      players: ['Alcaraz', 'Djokovic'],
+      teams: [],
+    };
+    const timelineIndex: TimelineIndex = {
+      windowSize: 5,
+      windows: [{
+        index: 1043,
+        start: 5215,
+        end: 5220,
+        transcriptText: 'Broadcaster animation after the match, Djokovic through 6-3, 6-2.',
+        transcriptSegments: [],
+        speechDensity: 0.4,
+        audioEnergy: 0.9,
+        hasQuestionCue: false,
+        hasInterviewCue: false,
+        hasCommentaryCue: false,
+        hasReplayCue: false,
+        hasScoreCue: true,
+      }],
+      audioProfile: audioProfileForSummaries([{
+        start: 5219,
+        end: 5220,
+        strongestAttackTime: 5219.4,
+      }]),
+    };
+    const segments = [{
+      id: 'segment_0',
+      start: 5215,
+      end: 5220,
+      type: 'live_play' as const,
+      subtype: null,
+      speechMode: 'commentary' as const,
+      scoreboardPresent: false,
+      participants: ['Alcaraz', 'Djokovic'],
+      confidence: 0.9,
+      sourceWindowIndexes: [1043],
       evidence: [],
     }];
 
@@ -3213,6 +4324,54 @@ describe('media-analysis-v2 validation and linking', () => {
     expect(events[0].evidence[1].metadata?.scoreTransitionStatus).toBe('supports_state');
   });
 
+  it('does not attach later slow-motion pressure-like OCR context to audio-led point results', async () => {
+    const assetDir = await mkdtemp(resolve(tmpdir(), 'mam-v2-audio-point-late-recap-'));
+    const momentDir = resolve(assetDir, 'moments', '0');
+    await mkdir(momentDir, { recursive: true });
+    await writeFile(resolve(momentDir, 'context.json'), JSON.stringify({
+      label: 'Alcaraz anticipates pass, earns break points',
+      scoreBefore: '3-6, 2-5 (15-40)',
+      scoreChanged: false,
+      peakTime: 136.5,
+      set_period: 'Set 2',
+      audioEnergy: 0.82,
+    }), 'utf-8');
+
+    const events = await addScoreConfirmationEvidence(assetDir, [{
+      id: 'event_0',
+      segmentId: 'segment_0',
+      type: 'point_won',
+      label: 'Oh, are you kidding me? How good is this game?',
+      anchorTime: 100,
+      peakTime: 100,
+      startTime: 92,
+      endTime: 100,
+      importance: 83,
+      confidence: 0.58,
+      entities: ['Djokovic', 'Alcaraz'],
+      evidence: [{
+        type: 'audio',
+        ref: 'audio-peak:audio_peak_0',
+        confidence: 0.62,
+        metadata: {
+          peakTime: 100,
+          audioEnergy: 0.83,
+          localBaseline: 0.3,
+          spikeScore: 0.53,
+          percentileRank: 0.99,
+          audioPeakShape: 'spike',
+        },
+      }],
+      parentEventId: null,
+      validationStatus: 'candidate',
+      relationType: null,
+    }]);
+
+    expect(events[0].evidence).toHaveLength(1);
+    expect(events[0].evidence[0].type).toBe('audio');
+    expect(events[0].confidence).toBe(0.58);
+  });
+
   it('uses a single OCR result-score snapshot to support matching result events', async () => {
     const assetDir = await mkdtemp(resolve(tmpdir(), 'mam-v2-snapshot-result-'));
     const momentDir = resolve(assetDir, 'moments', '0');
@@ -3740,6 +4899,134 @@ describe('media-analysis-v2 ranking and summary', () => {
         windowSize: 5,
         windows: [],
       },
+      audioProfile: {
+        frameSize: 0.5,
+        sampleRate: 8000,
+        frames: [{
+          index: 0,
+          start: 0,
+          end: 0.5,
+          rmsEnergy: 0.5,
+          peakEnergy: 0.7,
+          energyDelta: 0.5,
+          zeroCrossingRate: 0.1,
+          silenceRatio: 0.2,
+          burstScore: 0.56,
+        }],
+        summaries: {
+          oneSecond: [{
+            index: 0,
+            start: 0,
+            end: 1,
+            windowSize: 1,
+            rmsEnergy: 0.5,
+            energyMean: 0.5,
+            energyMax: 0.5,
+            energyStdDev: 0,
+            burstCount: 1,
+            onsetRate: 1,
+            silenceRatio: 0.2,
+            activeDuration: 0.5,
+            sustainedLoudnessDuration: 0.5,
+            strongestAttackTime: 0.25,
+            strongestAttackScore: 0.5,
+            zeroCrossingRateMean: 0.1,
+            onsetRegularity: 0,
+            rallyTextureScore: 0.5,
+            reactionBurstScore: 0.6,
+            speechDominanceScore: 0.4,
+            musicBedScore: 0.2,
+            umpireAnnouncementScore: 0.3,
+            applauseCrowdScore: 0.5,
+            pointShapeHint: 'short_point',
+          }],
+          fiveSecond: [{
+            index: 0,
+            start: 0,
+            end: 5,
+            windowSize: 5,
+            rmsEnergy: 0.5,
+            energyMean: 0.5,
+            energyMax: 0.5,
+            energyStdDev: 0,
+            burstCount: 1,
+            onsetRate: 0.2,
+            silenceRatio: 0.2,
+            activeDuration: 0.5,
+            sustainedLoudnessDuration: 0.5,
+            strongestAttackTime: 0.25,
+            strongestAttackScore: 0.5,
+            zeroCrossingRateMean: 0.1,
+            onsetRegularity: 0,
+            rallyTextureScore: 0.5,
+            reactionBurstScore: 0.6,
+            speechDominanceScore: 0.4,
+            musicBedScore: 0.2,
+            umpireAnnouncementScore: 0.3,
+            applauseCrowdScore: 0.5,
+            pointShapeHint: 'short_point',
+          }],
+        },
+      },
+      audioPeaks: [
+        {
+          id: 'audio_peak_0',
+          groupId: 'audio_peak_group_0',
+          windowIndex: 2,
+          startTime: 10,
+          endTime: 15,
+          peakTime: 12.5,
+          audioEnergy: 0.9,
+          localBaseline: 0.2,
+          spikeScore: 0.7,
+          percentileRank: 1,
+          shape: 'spike',
+        },
+      ],
+      audioReactionEpisodes: [{
+        id: 'audio_reaction_episode_0',
+        startTime: 0,
+        endTime: 25,
+        primaryCandidateWindowId: 'candidate_window_0',
+        primaryAudioPeakId: 'audio_peak_0',
+        primaryAnchorTime: 12.5,
+        primaryReason: 'first_strong_reaction',
+        confidence: 0.8,
+        memberCount: 1,
+        members: [{
+          candidateWindowId: 'candidate_window_0',
+          audioPeakId: 'audio_peak_0',
+          anchorTime: 12.5,
+          role: 'primary_anchor',
+          audioSourceHint: 'crowd_or_reaction',
+          spikeScore: 0.7,
+          percentileRank: 1,
+        }],
+        evidence: [{ type: 'audio', ref: 'audio-peak:audio_peak_0' }],
+      }],
+      candidateWindows: [{
+        id: 'candidate_window_0',
+        source: 'audio_peak',
+        sourceRef: 'audio-peak:audio_peak_0',
+        startTime: 0,
+        endTime: 25,
+        anchorTime: 12.5,
+        priority: 'high',
+        facets: {
+          playPhase: 'live_reaction',
+          contentMode: 'live_view',
+          transcriptRelation: 'current_action',
+        },
+        segmentId: null,
+        segmentType: null,
+        scoreboardPresent: null,
+        speechDensity: null,
+        audioSourceHint: 'crowd_or_reaction',
+        nearbyTranscript: 'What a point',
+        linkedEventIds: ['event_0'],
+        previousEventId: null,
+        evidence: [{ type: 'audio', ref: 'audio-peak:audio_peak_0' }],
+      }],
       segments: [],
       events: [
         {
@@ -3828,6 +5115,17 @@ describe('media-analysis-v2 ranking and summary', () => {
 
     expect(stored.events.map((event) => event.id)).toEqual(['event_0', 'event_1', 'event_2']);
     expect(stored.events.map((event) => event.reliabilityRank)).toEqual([3, 1, 2]);
+    expect(stored.audioPeaks).toHaveLength(1);
+    expect(summary.counts.audioPeaks).toBe(1);
+    expect(stored.audioProfile?.frames).toHaveLength(1);
+    expect(summary.counts.audioProfileFrames).toBe(1);
+    expect(summary.counts.audioProfileOneSecondSummaries).toBe(1);
+    expect(summary.counts.audioProfileFiveSecondSummaries).toBe(1);
+    expect(stored.audioReactionEpisodes).toHaveLength(1);
+    expect(summary.counts.audioReactionEpisodes).toBe(1);
+    expect(stored.candidateWindows).toHaveLength(1);
+    expect(summary.counts.candidateWindows).toBe(1);
+    expect(summary.audioPeakCounts).toEqual([{ shape: 'spike', count: 1 }]);
     expect(summary.ocrSupportCounts).toEqual([
       { status: 'supports', count: 1 },
       { status: 'weak_support', count: 1 },

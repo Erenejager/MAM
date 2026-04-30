@@ -1,13 +1,17 @@
 import type { MediaAnalysisResult, TranscriptSegment } from './types.js';
 import { profileAsset } from './asset-profile.js';
 import { buildTimelineIndex } from './timeline-index.js';
+import { buildAudioPeakIndex } from './audio-peaks.js';
 import { classifySegments } from './segment-classifier.js';
 import { validateSegments } from './segment-validation.js';
 import { generateInitialEvents } from './event-candidates.js';
 import { validateAndNormalizeEvents } from './event-validation.js';
 import { linkRelatedEvents } from './event-linking.js';
 import { addScoreConfirmationEvidence } from './score-confirmation.js';
+import { addAudioPeakEvidence } from './audio-evidence.js';
 import { annotateEventReliability } from './event-reliability.js';
+import { buildAudioReactionEpisodes } from './audio-reaction-episodes.js';
+import { buildCandidateWindowPackets } from './candidate-windows.js';
 import { saveMediaAnalysisResult } from './storage.js';
 
 export type { TranscriptSegment } from './types.js';
@@ -17,6 +21,8 @@ export type {
   Event,
   TimelineIndex,
   MediaAnalysisResult,
+  AudioPeak,
+  AudioReactionEpisode,
 } from './types.js';
 
 export type MediaAnalysisProgress = (step: string, detail?: string) => void;
@@ -46,6 +52,9 @@ export async function runMediaAnalysisV2(
     5,
   );
 
+  progress('audio-peaks', 'building local audio peak index');
+  const audioPeaks = buildAudioPeakIndex(timelineIndex);
+
   progress('segments', 'classifying content spans');
   const initialSegments = classifySegments(timelineIndex, assetProfile);
 
@@ -59,7 +68,7 @@ export async function runMediaAnalysisV2(
   });
 
   progress('events', 'generating initial event candidates');
-  const candidateEvents = generateInitialEvents(assetProfile, timelineIndex, segments);
+  const candidateEvents = generateInitialEvents(assetProfile, timelineIndex, segments, audioPeaks);
 
   progress('validate-events', 'validating and normalizing event candidates');
   const validatedEvents = validateAndNormalizeEvents(candidateEvents, {
@@ -73,11 +82,25 @@ export async function runMediaAnalysisV2(
 
   progress('confirm-events', 'attaching optional score/OCR evidence');
   const confirmedEvents = await addScoreConfirmationEvidence(assetDir, linkedEvents);
-  const events = annotateEventReliability(confirmedEvents);
 
+  progress('audio-evidence', 'attaching nearby audio peak evidence');
+  const audioSupportedEvents = addAudioPeakEvidence(confirmedEvents, audioPeaks);
+  const events = annotateEventReliability(audioSupportedEvents);
+
+  progress('candidate-windows', 'building LLM-ready candidate window packets');
+  const candidateWindows = buildCandidateWindowPackets(timelineIndex, segments, audioPeaks, events);
+
+  progress('audio-reaction-episodes', 'grouping candidate audio peaks into reaction episodes');
+  const audioReactionEpisodes = buildAudioReactionEpisodes(audioPeaks, candidateWindows);
+
+  const { audioProfile, ...storedTimelineIndex } = timelineIndex;
   const result = {
     assetProfile,
-    timelineIndex,
+    timelineIndex: storedTimelineIndex,
+    audioProfile,
+    audioPeaks,
+    audioReactionEpisodes,
+    candidateWindows,
     segments,
     events,
   };

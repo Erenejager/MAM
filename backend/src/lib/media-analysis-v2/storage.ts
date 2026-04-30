@@ -29,7 +29,14 @@ export interface MediaAnalysisSummary {
   counts: {
     segments: number;
     events: number;
+    audioPeaks: number;
+    audioProfileFrames: number;
+    audioProfileOneSecondSummaries: number;
+    audioProfileFiveSecondSummaries: number;
+    audioReactionEpisodes: number;
+    candidateWindows: number;
   };
+  audioPeakCounts: Array<{ shape: 'spike' | 'sustained'; count: number }>;
   ocrSupportCounts: Array<{ status: 'supports' | 'weak_support' | 'conflicts'; count: number }>;
   scoreTransitionCounts: Array<{
     status: 'supports_result' | 'supports_state' | 'conflicts_result' | 'unknown';
@@ -74,6 +81,9 @@ export async function loadMediaAnalysisResult(assetDir: string): Promise<MediaAn
   const result = JSON.parse(content) as MediaAnalysisResult;
   return {
     ...result,
+    audioReactionEpisodes: result.audioReactionEpisodes ?? [],
+    candidateWindows: result.candidateWindows ?? [],
+    audioPeaks: result.audioPeaks ?? [],
     events: annotateEventReliability(result.events),
   };
 }
@@ -115,7 +125,14 @@ function buildSummary(
     counts: {
       segments: result.segments.length,
       events: result.events.length,
+      audioPeaks: (result.audioPeaks ?? []).length,
+      audioProfileFrames: result.audioProfile?.frames.length ?? 0,
+      audioProfileOneSecondSummaries: result.audioProfile?.summaries.oneSecond.length ?? 0,
+      audioProfileFiveSecondSummaries: result.audioProfile?.summaries.fiveSecond.length ?? 0,
+      audioReactionEpisodes: (result.audioReactionEpisodes ?? []).length,
+      candidateWindows: (result.candidateWindows ?? []).length,
     },
+    audioPeakCounts: countByAudioPeakShape((result.audioPeaks ?? []).map((peak) => peak.shape)),
     ocrSupportCounts: countByStatus(
       result.events
         .map((event) => getOcrSupportStatus(event))
@@ -143,6 +160,18 @@ function buildSummary(
     segmentTypes: countBy(result.segments.map((segment) => segment.type)),
     eventTypes: countBy(result.events.map((event) => event.type)),
   };
+}
+
+function countByAudioPeakShape(
+  values: Array<'spike' | 'sustained'>,
+): Array<{ shape: 'spike' | 'sustained'; count: number }> {
+  const counts = new Map<'spike' | 'sustained', number>();
+  for (const value of values) {
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([shape, count]) => ({ shape, count }))
+    .sort((a, b) => b.count - a.count);
 }
 
 function countBy(values: string[]): Array<{ type: string; count: number }> {

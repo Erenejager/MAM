@@ -116,7 +116,8 @@ function anchorTennisResultRecaps(events: Event[]): Event[] {
   return events.map((event) => {
     if (
       event.relationType !== 'primary' ||
-      (event.type !== 'set_won' && event.type !== 'match_won')
+      (event.type !== 'set_won' && event.type !== 'match_won') ||
+      hasAudioProfileAnchorEvidence(event)
     ) {
       return event;
     }
@@ -153,6 +154,13 @@ function anchorTennisResultRecaps(events: Event[]): Event[] {
       ],
     };
   });
+}
+
+function hasAudioProfileAnchorEvidence(event: Event): boolean {
+  return event.evidence.some((evidence) =>
+    evidence.type === 'audio' &&
+    evidence.ref.startsWith('audio-profile:'),
+  );
 }
 
 function isCompatiblePressureResult(pressure: Event, result: Event): boolean {

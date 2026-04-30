@@ -33,6 +33,10 @@ export interface EvidenceRef {
     peakTime?: number | null;
     setPeriod?: string | null;
     audioEnergy?: number | null;
+    localBaseline?: number | null;
+    spikeScore?: number | null;
+    percentileRank?: number | null;
+    audioPeakShape?: 'spike' | 'sustained' | null;
   };
 }
 
@@ -60,6 +64,77 @@ export interface TimelineWindow {
   hasCommentaryCue: boolean;
   hasReplayCue: boolean;
   hasScoreCue: boolean;
+}
+
+export interface AudioProfileFrame {
+  index: number;
+  start: number;
+  end: number;
+  rmsEnergy: number;
+  peakEnergy: number;
+  energyDelta: number;
+  zeroCrossingRate: number;
+  silenceRatio: number;
+  burstScore: number;
+}
+
+export interface AudioProfileWindowSummary {
+  index: number;
+  start: number;
+  end: number;
+  windowSize: number;
+  rmsEnergy: number;
+  energyMean: number;
+  energyMax: number;
+  energyStdDev: number;
+  burstCount: number;
+  onsetRate: number;
+  silenceRatio: number;
+  activeDuration: number;
+  sustainedLoudnessDuration: number;
+  strongestAttackTime: number | null;
+  strongestAttackScore: number;
+  zeroCrossingRateMean: number;
+  onsetRegularity: number;
+  rallyTextureScore: number;
+  reactionBurstScore: number;
+  speechDominanceScore: number;
+  musicBedScore: number;
+  umpireAnnouncementScore: number;
+  applauseCrowdScore: number;
+  pointShapeHint: 'short_point' | 'medium_rally' | 'long_rally' | 'reaction_only' | 'recap_only' | 'unknown';
+  context?: AudioProfileContextHint;
+}
+
+export interface AudioProfileContextHint {
+  speechDensity: number;
+  hasCommentaryCue: boolean;
+  hasReplayCue: boolean;
+  hasScoreCue: boolean;
+  rallyTextureScore: number;
+  reactionBurstScore: number;
+  speechDominanceScore: number;
+  musicBedScore: number;
+  applauseCrowdScore: number;
+  pointShapeHint: AudioProfileWindowSummary['pointShapeHint'];
+  suppressionReasons: Array<
+    | 'high_speech_density'
+    | 'commentary_cue'
+    | 'replay_cue'
+    | 'speech_dominance'
+    | 'music_bed'
+    | 'weak_reaction_burst'
+  >;
+}
+
+export interface AudioProfile {
+  frameSize: number;
+  sampleRate: number;
+  frames: AudioProfileFrame[];
+  summaries: {
+    oneSecond: AudioProfileWindowSummary[];
+    fiveSecond: AudioProfileWindowSummary[];
+  };
 }
 
 export type SegmentType =
@@ -136,11 +211,84 @@ export interface Event {
 export interface TimelineIndex {
   windowSize: number;
   windows: TimelineWindow[];
+  audioProfile?: AudioProfile;
+}
+
+export interface AudioPeak {
+  id: string;
+  groupId: string;
+  windowIndex: number;
+  startTime: number;
+  endTime: number;
+  peakTime: number;
+  audioEnergy: number;
+  localBaseline: number;
+  spikeScore: number;
+  percentileRank: number;
+  shape: 'spike' | 'sustained';
+}
+
+export type CandidatePlayPhase = 'live_action' | 'live_reaction' | 'between_points' | 'changeover_or_break' | 'unknown';
+export type CandidateContentMode = 'live_view' | 'replay_or_slow_motion' | 'bench_or_player_closeup' | 'crowd_or_atmosphere' | 'studio_or_graphic' | 'unknown';
+export type CandidateTranscriptRelation = 'current_action' | 'previous_action_recap' | 'next_point_setup' | 'generic' | 'unknown';
+
+export interface CandidateWindowPacket {
+  id: string;
+  source: 'audio_peak';
+  sourceRef: string;
+  startTime: number;
+  endTime: number;
+  anchorTime: number;
+  priority: 'high' | 'medium' | 'low';
+  facets: {
+    playPhase: CandidatePlayPhase;
+    contentMode: CandidateContentMode;
+    transcriptRelation: CandidateTranscriptRelation;
+  };
+  segmentId: string | null;
+  segmentType: SegmentType | null;
+  scoreboardPresent: boolean | null;
+  speechDensity: number | null;
+  audioSourceHint: 'crowd_or_reaction' | 'speech_or_commentary' | 'mixed_or_unknown';
+  nearbyTranscript: string;
+  linkedEventIds: string[];
+  previousEventId: string | null;
+  evidence: EvidenceRef[];
+}
+
+export type AudioReactionEpisodeRole = 'primary_anchor' | 'episode_tail' | 'recap_or_speech_tail';
+
+export interface AudioReactionEpisodeMember {
+  candidateWindowId: string;
+  audioPeakId: string;
+  anchorTime: number;
+  role: AudioReactionEpisodeRole;
+  audioSourceHint: CandidateWindowPacket['audioSourceHint'];
+  spikeScore: number;
+  percentileRank: number;
+}
+
+export interface AudioReactionEpisode {
+  id: string;
+  startTime: number;
+  endTime: number;
+  primaryCandidateWindowId: string;
+  primaryAudioPeakId: string;
+  primaryAnchorTime: number;
+  primaryReason: 'first_strong_reaction' | 'best_available_peak';
+  confidence: number;
+  memberCount: number;
+  members: AudioReactionEpisodeMember[];
+  evidence: EvidenceRef[];
 }
 
 export interface MediaAnalysisResult {
   assetProfile: AssetProfile;
   timelineIndex: TimelineIndex;
+  audioProfile?: AudioProfile;
+  audioPeaks: AudioPeak[];
+  audioReactionEpisodes?: AudioReactionEpisode[];
+  candidateWindows?: CandidateWindowPacket[];
   segments: SegmentSpan[];
   events: Event[];
 }
