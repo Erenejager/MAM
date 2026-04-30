@@ -1,5 +1,5 @@
 ultralytics
-onnxruntime-cpu
+onnxruntime
 opencv-python-headless
 numpy
 pytest
