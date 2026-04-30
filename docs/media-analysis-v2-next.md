@@ -4,6 +4,42 @@
 
 Improve key-moment correctness and boundaries before building more agent/highlight abstractions.
 
+## Next Session Handoff
+
+Current saved state:
+
+- YOLO scoreboard detection is wired into V2 as an optional gated stage.
+- Audit OCR sampling can run YOLO with `--detect-scoreboard`.
+- Full-pipeline reference smoke completed with `60` scoreboard samples and `31` visible scoreboard frames.
+- Candidate adjudication packets can be generated for LLM validation:
+  - `backend/scripts/audit-v2-candidate-adjudication-packets.mjs`
+  - latest output path used: `/tmp/v2-candidate-adjudication-packets.json`
+
+Continue with:
+
+1. Add the actual LLM adjudication audit call on top of the packet builder.
+2. Keep output audit-only first: write adjudication JSON beside the packets, do not mutate V2 events.
+3. Test first on the known review targets:
+   - `37:48` break/game confirmation
+   - `40:54` set win with stale/mixed OCR risk
+   - `1:13:57` audio-led big point
+   - `79:40` unpromoted reaction candidate
+   - `85:02` pressure/setup-only
+   - `86:59` post-match/graphic
+4. Ask the LLM for structured fields:
+   - `is_key_moment`
+   - `moment_type`
+   - `is_live_action`
+   - `is_replay_or_recap`
+   - `scoreboard_readable`
+   - `score_before`
+   - `score_after`
+   - `score_changed`
+   - `winner`
+   - `confidence`
+   - `reasoning`
+5. Only after manual review, wire trusted adjudication output into promotion or suppression logic.
+
 ## Current Baseline
 
 Reference asset:
@@ -383,6 +419,15 @@ Order of work:
        - `tail_or_context_check`
      - fixed offsets are retained only as fallback fill-ins
      - optional frame extraction is available with `--extract-frames=/tmp/path`; it writes candidate JPEGs plus `manifest.json`
+     - optional YOLO scoreboard detection is available from the audit with `--detect-scoreboard`; it flattens sampled frames, runs the Docker detector once, and writes `scoreboard-detections.json`
+     - the V2 pipeline now has an optional gated scoreboard detection stage:
+       - enable with `MAM_SCOREBOARD_DETECTOR_ENABLED=1`
+       - outputs are persisted under `media_analysis_v2.scoreboardDetections`
+       - summary counts include `scoreboardDetectionSamples` and `scoreboardVisibleFrames`
+     - LLM adjudication packet builder is available:
+       - script: `backend/scripts/audit-v2-candidate-adjudication-packets.mjs`
+       - input: V2 result with `scoreboardDetections`
+       - output: JSON packets with audio facts, transcript windows, current event context, selected YOLO crops, and a structured prompt seed
      - current finding: legacy OCR context is too sparse/stale for `40:54` and `79:41`, so V2 must sample exact frames around the reaction-like anchor
      - manual video validation:
        - `79:40.3` samples are good; `79:49`-`79:56` is replay

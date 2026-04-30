@@ -12,6 +12,7 @@ import { addAudioPeakEvidence } from './audio-evidence.js';
 import { annotateEventReliability } from './event-reliability.js';
 import { buildAudioReactionEpisodes } from './audio-reaction-episodes.js';
 import { buildCandidateWindowPackets } from './candidate-windows.js';
+import { runScoreboardDetectionStage } from './scoreboard-detection.js';
 import { saveMediaAnalysisResult } from './storage.js';
 
 export type { TranscriptSegment } from './types.js';
@@ -23,6 +24,7 @@ export type {
   MediaAnalysisResult,
   AudioPeak,
   AudioReactionEpisode,
+  ScoreboardDetectionRun,
 } from './types.js';
 
 export type MediaAnalysisProgress = (step: string, detail?: string) => void;
@@ -93,6 +95,16 @@ export async function runMediaAnalysisV2(
   progress('audio-reaction-episodes', 'grouping candidate audio peaks into reaction episodes');
   const audioReactionEpisodes = buildAudioReactionEpisodes(audioPeaks, candidateWindows);
 
+  progress('scoreboard-detection', 'sampling reaction anchors for scoreboard detection');
+  const scoreboardDetections = await runScoreboardDetectionStage({
+    videoPath,
+    assetDir,
+    durationSeconds,
+    timelineIndex,
+    candidateWindows,
+    audioReactionEpisodes,
+  });
+
   const { audioProfile, ...storedTimelineIndex } = timelineIndex;
   const result = {
     assetProfile,
@@ -101,6 +113,7 @@ export async function runMediaAnalysisV2(
     audioPeaks,
     audioReactionEpisodes,
     candidateWindows,
+    scoreboardDetections,
     segments,
     events,
   };

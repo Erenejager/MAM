@@ -35,6 +35,8 @@ export interface MediaAnalysisSummary {
     audioProfileFiveSecondSummaries: number;
     audioReactionEpisodes: number;
     candidateWindows: number;
+    scoreboardDetectionSamples: number;
+    scoreboardVisibleFrames: number;
   };
   audioPeakCounts: Array<{ shape: 'spike' | 'sustained'; count: number }>;
   ocrSupportCounts: Array<{ status: 'supports' | 'weak_support' | 'conflicts'; count: number }>;
@@ -83,6 +85,16 @@ export async function loadMediaAnalysisResult(assetDir: string): Promise<MediaAn
     ...result,
     audioReactionEpisodes: result.audioReactionEpisodes ?? [],
     candidateWindows: result.candidateWindows ?? [],
+    scoreboardDetections: result.scoreboardDetections ?? {
+      status: 'skipped',
+      enabled: false,
+      generatedAt: '',
+      detectorImage: null,
+      detectorModel: null,
+      sampleCount: 0,
+      visibleCount: 0,
+      detections: [],
+    },
     audioPeaks: result.audioPeaks ?? [],
     events: annotateEventReliability(result.events),
   };
@@ -131,6 +143,8 @@ function buildSummary(
       audioProfileFiveSecondSummaries: result.audioProfile?.summaries.fiveSecond.length ?? 0,
       audioReactionEpisodes: (result.audioReactionEpisodes ?? []).length,
       candidateWindows: (result.candidateWindows ?? []).length,
+      scoreboardDetectionSamples: result.scoreboardDetections?.sampleCount ?? 0,
+      scoreboardVisibleFrames: result.scoreboardDetections?.visibleCount ?? 0,
     },
     audioPeakCounts: countByAudioPeakShape((result.audioPeaks ?? []).map((peak) => peak.shape)),
     ocrSupportCounts: countByStatus(

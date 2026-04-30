@@ -105,6 +105,14 @@ export interface MediaAnalysisSummary {
   counts: {
     segments: number;
     events: number;
+    audioPeaks?: number;
+    audioProfileFrames?: number;
+    audioProfileOneSecondSummaries?: number;
+    audioProfileFiveSecondSummaries?: number;
+    audioReactionEpisodes?: number;
+    candidateWindows?: number;
+    scoreboardDetectionSamples?: number;
+    scoreboardVisibleFrames?: number;
   };
   ocrSupportCounts: Array<{ status: 'supports' | 'weak_support' | 'conflicts'; count: number }>;
   scoreTransitionCounts: Array<{
@@ -212,4 +220,33 @@ export interface MediaAnalysisResult {
     ocrSupportStatus?: 'supports' | 'weak_support' | 'conflicts' | null;
     reliabilityRank?: number | null;
   }>;
+  scoreboardDetections?: {
+    status: 'skipped' | 'complete' | 'failed';
+    enabled: boolean;
+    generatedAt: string;
+    detectorImage: string | null;
+    detectorModel: string | null;
+    sampleCount: number;
+    visibleCount: number;
+    detections: Array<{
+      candidateWindowId: string | null;
+      audioPeakId: string | null;
+      linkedEventIds: string[];
+      anchorTime: number;
+      sampleLabel: string;
+      sampleSource: 'audio' | 'fallback';
+      sampleTime: number;
+      framePath: string;
+      detectorFrame: string;
+      scoreboardVisible: boolean;
+      scoreboardConfidence: number | null;
+      scoreboardBbox: { x1: number; y1: number; x2: number; y2: number } | null;
+      scoreboardCropPath: string | null;
+      imageWidth: number | null;
+      imageHeight: number | null;
+      detectorSource: string | null;
+      detectorError: string | null;
+    }>;
+    error?: string;
+  };
 }

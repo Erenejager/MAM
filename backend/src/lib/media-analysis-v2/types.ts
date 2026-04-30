@@ -282,6 +282,38 @@ export interface AudioReactionEpisode {
   evidence: EvidenceRef[];
 }
 
+export interface ScoreboardDetection {
+  candidateWindowId: string | null;
+  audioPeakId: string | null;
+  linkedEventIds: string[];
+  anchorTime: number;
+  sampleLabel: string;
+  sampleSource: 'audio' | 'fallback';
+  sampleTime: number;
+  framePath: string;
+  detectorFrame: string;
+  scoreboardVisible: boolean;
+  scoreboardConfidence: number | null;
+  scoreboardBbox: { x1: number; y1: number; x2: number; y2: number } | null;
+  scoreboardCropPath: string | null;
+  imageWidth: number | null;
+  imageHeight: number | null;
+  detectorSource: string | null;
+  detectorError: string | null;
+}
+
+export interface ScoreboardDetectionRun {
+  status: 'skipped' | 'complete' | 'failed';
+  enabled: boolean;
+  generatedAt: string;
+  detectorImage: string | null;
+  detectorModel: string | null;
+  sampleCount: number;
+  visibleCount: number;
+  detections: ScoreboardDetection[];
+  error?: string;
+}
+
 export interface MediaAnalysisResult {
   assetProfile: AssetProfile;
   timelineIndex: TimelineIndex;
@@ -289,6 +321,7 @@ export interface MediaAnalysisResult {
   audioPeaks: AudioPeak[];
   audioReactionEpisodes?: AudioReactionEpisode[];
   candidateWindows?: CandidateWindowPacket[];
+  scoreboardDetections?: ScoreboardDetectionRun;
   segments: SegmentSpan[];
   events: Event[];
 }

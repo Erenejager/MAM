@@ -864,6 +864,51 @@ V2 OCR sampling manifest:
 - next implementation should run OCR on these sample times and persist per-anchor reads before any winner/score attribution
 - detailed notes are recorded in `docs/media-analysis-v2-ocr-sampling-plan.md`
 
+YOLO scoreboard detector wiring:
+
+- extended `backend/scripts/audit-v2-ocr-sampling-plan.mjs` with `--detect-scoreboard`
+  - requires `--extract-frames=/tmp/path`
+  - flattens sampled frames for Docker input
+  - runs `scoreboard-detector` once
+  - writes mapped `scoreboard-detections.json` rows with candidate/sample labels and crop paths
+- added optional V2 pipeline stage `scoreboard-detection`
+  - gated by `MAM_SCOREBOARD_DETECTOR_ENABLED=1`
+  - samples primary reaction episodes/candidate windows around action, reaction, settle, and context-check times
+  - persists detections as `scoreboardDetections` in `media_analysis_v2/result.json`
+  - adds summary counts for sampled frames and visible scoreboard frames
+- default behavior is unchanged when the detector is disabled or unavailable
+- validation:
+  - `npm run build`
+  - `npx vitest run src/__tests__/media-analysis-v2.test.ts`
+- full-pipeline smoke on reference asset:
+  - command used explicit model dir:
+    - `MAM_SCOREBOARD_DETECTOR_ENABLED=1 MAM_SCOREBOARD_DETECTOR_MODEL_DIR=/home/clawdbot/MAM/models/scoreboard-yolo npx tsx run-media-analysis-v2.mjs /home/clawdbot/.mam/storage/3936415e-cded-4b32-a264-03b12a33d73f/original.mp4 /home/clawdbot/.mam/storage/3936415e-cded-4b32-a264-03b12a33d73f/transcript.json /home/clawdbot/.mam/storage/3936415e-cded-4b32-a264-03b12a33d73f`
+  - result: `scoreboardDetections.status=complete`
+  - samples: `60`
+  - visible scoreboard frames: `31`
+  - summary counts now show `scoreboardDetectionSamples=60`, `scoreboardVisibleFrames=31`
+  - fixed default model-dir resolution so repo-root and `backend/` working directories both find `models/scoreboard-yolo`
+
+Candidate adjudication packet builder:
+
+- added `backend/scripts/audit-v2-candidate-adjudication-packets.mjs`
+- purpose:
+  - convert persisted V2 candidate windows plus YOLO scoreboard detections into compact LLM-ready audit packets
+  - keep the output audit-only; it does not call an LLM and does not mutate events
+- each packet includes:
+  - candidate timing and facets
+  - nearby audio peak/reaction episode and 1s audio summary facts
+  - transcript before/around/after the anchor
+  - current/nearby V2 events and OCR evidence
+  - all YOLO samples plus selected crops for `beforeOrAction`, `reaction`, `settle`, `tailOrContext`, and `bestOverall`
+  - a short prompt seed and suggested structured adjudication schema
+- reference command:
+  - `node backend/scripts/audit-v2-candidate-adjudication-packets.mjs /home/clawdbot/.mam/storage/3936415e-cded-4b32-a264-03b12a33d73f/media_analysis_v2/result.json --output=/tmp/v2-candidate-adjudication-packets.json --limit=12`
+- reference output:
+  - source detections: `60`
+  - visible scoreboard frames: `31`
+  - packets written: `12`
+
 Audio profile implementation start:
 
 - added observable `audioProfile` to V2 result output

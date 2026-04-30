@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -11,14 +11,29 @@ const limitArg = process.argv.find((arg) => arg.startsWith('--limit='));
 const minScoreArg = process.argv.find((arg) => arg.startsWith('--min-score='));
 const extractFramesArg = process.argv.find((arg) => arg.startsWith('--extract-frames='));
 const videoArg = process.argv.find((arg) => arg.startsWith('--video='));
+const detectScoreboard = process.argv.includes('--detect-scoreboard');
+const detectorImageArg = process.argv.find((arg) => arg.startsWith('--detector-image='));
+const detectorModelDirArg = process.argv.find((arg) => arg.startsWith('--detector-model-dir='));
+const detectorModelArg = process.argv.find((arg) => arg.startsWith('--detector-model='));
+const detectorOutputArg = process.argv.find((arg) => arg.startsWith('--detector-output='));
+const detectorConfArg = process.argv.find((arg) => arg.startsWith('--detector-conf='));
 const limit = limitArg ? Number(limitArg.split('=')[1]) : 50;
 const minScore = minScoreArg ? Number(minScoreArg.split('=')[1]) : 0.52;
 const extractFramesDir = extractFramesArg ? extractFramesArg.split('=')[1] : null;
 const videoPath = videoArg ? videoArg.split('=')[1] : assetDir ? resolve(assetDir, 'original.mp4') : null;
+const detectorImage = detectorImageArg ? detectorImageArg.split('=')[1] : 'scoreboard-detector';
+const detectorModelDir = detectorModelDirArg ? detectorModelDirArg.split('=')[1] : resolve(process.cwd(), 'models/scoreboard-yolo');
+const detectorModel = detectorModelArg ? detectorModelArg.split('=')[1] : 'best.onnx';
+const detectorOutputDir = detectorOutputArg
+  ? detectorOutputArg.split('=')[1]
+  : extractFramesDir
+    ? resolve(extractFramesDir, 'scoreboard-crops')
+    : null;
+const detectorConf = detectorConfArg ? detectorConfArg.split('=')[1] : '0.25';
 const fallbackSampleOffsets = [-10, -5, -2, 0, 2, 5, 10, 15];
 
 if (!resultPath) {
-  console.error('Usage: node backend/scripts/audit-v2-ocr-sampling-plan.mjs <media_analysis_v2/result.json> [assetDir] [--limit=50] [--min-score=0.52] [--extract-frames=/tmp/ocr-samples] [--video=/path/video.mp4]');
+  console.error('Usage: node backend/scripts/audit-v2-ocr-sampling-plan.mjs <media_analysis_v2/result.json> [assetDir] [--limit=50] [--min-score=0.52] [--extract-frames=/tmp/ocr-samples] [--video=/path/video.mp4] [--detect-scoreboard]');
   process.exit(1);
 }
 
@@ -53,6 +68,7 @@ console.log(`1s summaries: ${oneSecond.length}`);
 console.log(`reaction-like groups: ${groups.length}`);
 console.log(`displayed: ${candidates.length}`);
 if (extractFramesDir) console.log(`extractFramesDir: ${extractFramesDir}`);
+if (detectScoreboard) console.log(`scoreboardDetector: ${detectorImage}`);
 console.log('');
 console.log('This is a sampling/audit manifest only. It proposes OCR frame times around V2-owned reaction-like anchors; it does not change events.');
 console.log('');
@@ -104,9 +120,25 @@ if (extractFramesDir) {
     process.exit(1);
   }
 
-  await extractSampleFrames(candidates, videoPath, extractFramesDir);
+  const frameManifest = await extractSampleFrames(candidates, videoPath, extractFramesDir);
   console.log('');
   console.log(`Extracted OCR sample frames to: ${extractFramesDir}`);
+
+  if (detectScoreboard) {
+    const detectionRows = await runScoreboardDetector({
+      frameManifest,
+      detectorImage,
+      detectorModelDir,
+      detectorModel,
+      detectorOutputDir,
+      detectorConf,
+    });
+    await writeFile(resolve(extractFramesDir, 'scoreboard-detections.json'), JSON.stringify(detectionRows, null, 2), 'utf-8');
+    console.log(`Ran scoreboard detector and wrote: ${resolve(extractFramesDir, 'scoreboard-detections.json')}`);
+  }
+} else if (detectScoreboard) {
+  console.error('Cannot run scoreboard detector without --extract-frames=/tmp/path.');
+  process.exit(1);
 }
 
 function scoreSummary(summary) {
@@ -422,11 +454,82 @@ async function extractSampleFrames(inputCandidates, inputVideoPath, outputDir) {
         sampleSource: sample.source,
         sampleTime,
         outputPath,
+        detectorFrame: `${candidateId}__${formatFilenameTime(sampleTime)}__${safeFilename(sample.label)}.jpg`,
       });
     }
   }
 
   await writeFile(resolve(outputDir, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf-8');
+  return manifest;
+}
+
+async function runScoreboardDetector({
+  frameManifest,
+  detectorImage,
+  detectorModelDir,
+  detectorModel,
+  detectorOutputDir,
+  detectorConf,
+}) {
+  if (!detectorOutputDir) {
+    throw new Error('detectorOutputDir is required');
+  }
+
+  const detectorInputDir = resolve(detectorOutputDir, 'input-flat');
+  const detectorCropDir = resolve(detectorOutputDir, 'crops');
+  await mkdir(detectorInputDir, { recursive: true });
+  await mkdir(detectorCropDir, { recursive: true });
+
+  for (const row of frameManifest) {
+    await copyFile(row.outputPath, resolve(detectorInputDir, row.detectorFrame));
+  }
+
+  const dockerArgs = [
+    'run',
+    '--rm',
+    '--user',
+    `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`,
+    '-v',
+    `${detectorModelDir}:/models:ro`,
+    '-v',
+    `${detectorInputDir}:/input:ro`,
+    '-v',
+    `${detectorCropDir}:/output`,
+    detectorImage,
+    '--model',
+    `/models/${detectorModel}`,
+    '--input',
+    '/input',
+    '--output',
+    '/output',
+    '--conf',
+    detectorConf,
+  ];
+
+  await execFileAsync('docker', dockerArgs, {
+    maxBuffer: 20 * 1024 * 1024,
+    timeout: 300_000,
+  });
+
+  const raw = await readFile(resolve(detectorCropDir, 'results.json'), 'utf-8');
+  const detectorRows = JSON.parse(raw);
+  const manifestByDetectorFrame = new Map(frameManifest.map((row) => [row.detectorFrame, row]));
+
+  return detectorRows.map((row) => {
+    const source = manifestByDetectorFrame.get(row.frame);
+    return {
+      ...source,
+      detectorFrame: row.frame,
+      scoreboardVisible: row.visible,
+      scoreboardConfidence: row.confidence,
+      scoreboardBbox: row.bbox,
+      scoreboardCropPath: row.crop_path ? resolve(detectorCropDir, row.crop_path) : null,
+      imageWidth: row.image_width,
+      imageHeight: row.image_height,
+      detectorSource: row.source,
+      detectorError: row.error ?? null,
+    };
+  });
 }
 
 function nearestPeak(time, radiusSeconds) {
