@@ -1,0 +1,5 @@
+ultralytics
+onnxruntime-cpu
+opencv-python-headless
+numpy
+pytest
