@@ -12,4 +12,7 @@ RUN pip install --no-cache-dir ultralytics \
 COPY detect.py .
 COPY tests/ tests/
 
+RUN useradd -m -u 1000 appuser
+USER appuser
+
 ENTRYPOINT ["python", "detect.py"]
