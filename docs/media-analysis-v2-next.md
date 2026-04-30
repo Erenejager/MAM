@@ -189,6 +189,12 @@ Latest agent-facing reliability change:
   - library/detail visibility polish
   - ingest-stage wiring for V2 visibility
 - review those deferred integration points again after the next quality pass, because the right UI/indexing shape may change as event structure and evidence evolve
+- replace the current coarse-only audio path with a layered tennis audio profile
+  - current V2 audio is one normalized RMS energy value per `5s` window
+  - this is useful for coarse reaction timing, but too coarse to understand rally texture, short/long points, commentator bumps, umpire announcements, music/changeover beds, or replay tails
+  - keep `5s` windows for transcript/OCR/segment alignment, but add finer `0.5s`-`1s` audio frames underneath them
+  - do not collapse fine audio back into only one `5s` energy value; preserve sub-window summaries so previous/next frame navigation can estimate action start, reaction start, tail, and break/recap context
+  - audio remains evidence, not final truth: it can propose boundaries and sound type, but transcript/OCR/video/LLM adjudication must decide event meaning
 
 ## Change
 
@@ -209,6 +215,236 @@ Confirmed reference case:
 - Around `12:34`, the broadcast shows slow-motion / bench / changeover coverage while players rest between games.
 - The `12:34` coverage should not emit a fresh primary event.
 - Crowd noise / audio energy before the bench coverage should be used as a backward-looking anchor signal: when a changeover/bench recap is detected, look earlier for the likely game-ending crowd peak or score/result beat rather than treating the bench segment as the moment.
+
+## Next Quality Pass
+
+Goal: move from transcript-led event detection toward multisignal event evidence without losing precision.
+
+Critical review before implementation:
+
+- Do not let audio peaks become confirmed tennis events by themselves. Audio can identify likely reaction timing, but it cannot distinguish point, game, set, match, replay, or recap without transcript/OCR context.
+- Do not replace the current V2 flow. `timelineIndex`, segment classification, event taxonomy, validation, linking, OCR evidence, and reliability metadata are already useful and should be extended.
+- Do not depend on legacy OCR moments as the long-term source of truth. Existing `moments/*/context.json` can be used for audit only; V2 should eventually sample score/OCR evidence around V2-owned candidate windows.
+- Do not use a global mean threshold as the trigger. Broadcast loudness varies, and sustained crowd beds or music can sit above the mean for long periods. Use local baseline, local maxima, percentile rank, and grouping.
+- Do not merge close tennis points by time alone. Consecutive points can be close; grouping should merge only the same reaction shape, not unrelated nearby events.
+- Do not promote non-live broadcast coverage to primary live events. Replays, slow motion, bench/changeover, studio, player close-ups, and filler shots often overlap; classify the live/replay relationship and the broadcast context as separate facets instead of separate event types.
+- Do not discard next-point setup windows just because transcript is stale. They may be valuable start-boundary evidence for the next point, even when they must not create a duplicate result for the previous point.
+- Do not create standalone crowd/atmosphere highlights by default. Most meaningful crowd peaks are evidence for a point/result endpoint or a replay/recap; only keep standalone crowd reactions when no linked tennis event is available and the peak is editorially useful.
+- Do not treat scoreboard presence or absence as a replay detector by itself. Replays can include scoreboard graphics, and non-replay bench/changeover/player-closeup coverage can have no scoreboard.
+- Do not make LLM calls the first detector. Use deterministic signals to find candidate windows, then use an LLM only for ambiguous or high-value adjudication.
+
+Order of work:
+
+1. Audit audio/crowd peaks on the reference asset. Done for the reference tennis asset.
+   - produce a compact table of peak timestamp, audio energy, nearby transcript, nearby OCR context, current event, and likely interpretation
+   - include windows with strong audio but no current event, and current events with weak/missing audio support
+   - separate live crowd reaction from replay, changeover, studio, applause, and generic crowd bed
+2. Add reusable V2 audio peak metadata. Implemented.
+   - calculate local baseline, local spike score, percentile rank, peak shape, and grouped peak id
+   - expose the metadata for inspection before changing event generation
+   - attach peak evidence to existing nearby events where it supports timing
+3. Add explicit candidate status for audio-led moments. Started conservatively.
+   - audio-only peak first tries to attach to a nearby live/replay candidate; only becomes low-confidence `crowd_reaction` when it cannot be linked
+   - audio plus nearby tennis context can become candidate `point_won`; current first case is the reviewed live `73:57` point ending
+   - audio plus OCR score movement can later promote to `point_won`, `game_won`, `set_won`, or `match_won`
+   - non-live coverage peaks must not create fresh primary live events; first replay back-anchor guard is implemented
+   - later replay/slow-motion OCR context with pressure-like score text and no score transition must not confirm audio-led point results
+   - next-point setup with stale transcript should be stored as possible start-boundary evidence for the next rally, not as a previous-point result
+4. Add a compact window-facet classifier before broader promotion. Packet layer implemented; promotion use is still pending.
+   - classify `playPhase`: `live_action`, `live_reaction`, `between_points`, `changeover_or_break`, `unknown`
+   - classify `contentMode`: `live_view`, `replay_or_slow_motion`, `bench_or_player_closeup`, `crowd_or_atmosphere`, `studio_or_graphic`, `unknown`
+   - classify `transcriptRelation`: `current_action`, `previous_action_recap`, `next_point_setup`, `generic`, `unknown`
+   - this avoids separate overlapping moment types like replay during changeover; a window can be `changeover_or_break` plus `replay_or_slow_motion`
+   - promotion decisions should use the combination of facets, not a single label
+   - use `changeover_or_break` as structural evidence for game/set boundaries, especially when it appears shortly after a possible game/set result
+   - do not let `changeover_or_break` confirm a result by itself; it should strengthen a nearby result candidate or trigger a backward search for one
+   - current implementation stores these facets in `candidateWindows` seeded by audio peaks so later LLM adjudication has a compact packet instead of the whole transcript
+5. Rebuild the audio pipeline around tennis audio profiles. Started with observable profile output.
+   - add an observable `audioProfile` layer before changing event behavior. Initial implementation done.
+     - frame size: start with `0.5s`
+     - keep current `5s` `timelineIndex.windows[].audioEnergy` for compatibility
+     - add fine-frame features:
+       - RMS energy. Implemented.
+       - peak energy. Implemented.
+       - energy delta / attack slope. Implemented.
+       - short-term silence score. Implemented as `silenceRatio`.
+       - zero-crossing rate. Implemented.
+       - onset count / burst score. Initial burst score and summary burst count implemented.
+       - optional first spectral features: centroid, flatness, low/mid/high band energy
+     - add rolled-up `1s` and `5s` summaries:
+       - energy mean/max/stddev. Implemented.
+       - burst count. Implemented.
+       - onset rate. Implemented.
+       - onset regularity
+       - active duration. Implemented.
+       - silence ratio. Implemented.
+       - sustained loudness duration. Implemented.
+       - strongest attack time. Implemented.
+   - derive tennis-specific audio hints. Initial observable implementation done on `1s` and `5s` summaries.
+     - `rallyTextureScore`. Implemented as signal-only onset/activity/moderate-energy texture.
+       - repeated short onsets, moderate energy, low speech dominance
+       - useful for estimating whether action was live and whether point was short/long
+     - `reactionBurstScore`. Implemented as signal-only attack/high-energy/noisy-onset burst score.
+       - sharp attack, high energy delta, noisy/sustained decay, plausible rally/setup before it
+       - useful for point-ending anchor selection
+     - `speechDominanceScore`. Initial signal-only proxy implemented; later pass should blend transcript overlap and better voice/harmonic features.
+       - dense transcript overlap plus voice-like/harmonic texture
+       - useful for marking commentator/referee/player speech and avoiding false crowd anchors
+     - `musicBedScore`. Initial signal-only proxy implemented from sustained/low-variance/regular onset texture.
+       - sustained harmonic/rhythmic energy across many frames
+       - useful for changeover/break suppression
+     - `umpireAnnouncementScore`. Initial proxy implemented; later pass should use score/transcript cues.
+       - short isolated speech burst after action/reaction, often near score cues
+       - useful as boundary/score evidence, not as a point result by itself
+     - `applauseCrowdScore`. Implemented as reaction/noisy/sustained/burst texture.
+       - noisy broad-band sustained response and/or applause-like onsets after action
+       - useful as endpoint support
+   - derive point-shape hints. Initial observable implementation done as `pointShapeHint`.
+     - `short_point`
+       - brief action texture followed quickly by reaction
+     - `medium_rally`
+       - several seconds of rally texture before reaction
+     - `long_rally`
+       - extended repeated hit/onset texture before reaction
+     - `reaction_only`
+       - strong endpoint reaction without enough visible/audio action history
+     - `recap_only`
+       - speech/replay context without a live action lead-in
+   - add context-adjusted audio hints. Initial observable implementation done as `summary.context`.
+     - raw audio scores remain unchanged
+     - context layer blends transcript/window signals:
+       - `speechDensity`
+       - commentary cue
+       - replay cue
+       - score cue
+     - context layer outputs adjusted rally/reaction/speech/music/crowd scores, adjusted `pointShapeHint`, and suppression reasons
+     - current reviewed effect:
+       - `23:07` raw `medium_rally` becomes context `recap_only`
+       - `73:57` remains context `medium_rally`
+       - `74:27` raw `medium_rally` becomes context `recap_only`
+       - `82:22` keeps suppression warnings without creating a fresh primary event
+   - upgrade audio peak outputs without deleting raw data:
+     - keep existing `audioPeaks` as raw coarse loudness peaks
+     - add `reactionLikePeaks` or equivalent derived anchors from fine audio profile
+     - first whole-media audit script is implemented as `backend/scripts/audit-v2-reaction-like-candidates.mjs`
+     - first review queue is recorded in `docs/media-analysis-v2-reaction-like-candidate-audit.md`
+     - review candidate labels in video before promotion:
+       - `37:48-37:49` confirmed live game-winning break point: Djokovic breaks from `3-4 30-40` to `3-5`
+       - `79:37-79:45` confirmed live point: set 2 `2-4 30-40` for Djokovic, Alcaraz wins the point around `79:41`
+       - `85:01-85:02` confirmed between-points pressure context: set 2 `2-5 0-40`, three match points, next serve starts around `85:13`
+       - `40:54-40:55` confirmed live set-winning point: set 1 `3-5 0-40`, Djokovic wins point and set
+       - `86:59-87:01` confirmed broadcaster animation after match; suppress as live key moment
+     - use fine-frame attack time instead of only `5s` midpoint where available
+     - keep speech/music/replay-heavy local bumps as context tails, not primary anchors
+     - regression tests to add before promotion:
+       - reaction-like candidate plus score/result transcript at `37:48-37:49` can become `game_won`. Implemented.
+       - reaction-like candidate at `40:54-40:55` can correct/improve `set_won` anchor. Implemented.
+       - between-points pressure candidate at `85:01-85:02` must not become a result event. Implemented.
+       - post-match broadcaster animation at `86:59-87:01` must stay recap/graphic tail. Implemented.
+     - latest reference output after this pass:
+       - `/tmp/media-analysis-v2-reaction-like-promotion-2026-04-30-v3/media_analysis_v2/result.json`
+       - `18` events
+       - added `37:48.25` `game_won`: `Djokovic breaks.`
+       - moved set result anchor to `40:54.75`
+       - no post-match event emitted around `86:59-87:01`
+     - remaining manual label not promoted yet:
+       - `79:37-79:45` confirmed live point for Alcaraz, but winner attribution needs stronger transcript/OCR/score handling before promotion
+   - upgrade `audioReactionEpisodes`:
+     - build episode start/end from fine-frame action/reaction/tail structure
+     - keep primary anchor as first strong reaction-like burst
+     - mark later loud speech/replay/music/commentary as `recap_or_speech_tail` or break context
+     - support previous/next navigation across fixed `5s` windows so a point split across windows can still be reconstructed
+   - add audit tooling before promotion changes. Implemented as `backend/scripts/audit-v2-audio-profile.mjs`.
+     - print fine-frame profile around known timestamps. Implemented.
+     - include action texture, reaction burst, speech/music scores, selected anchor, and member roles. Implemented.
+     - review first on:
+       - `23:07` slow-motion recap. Initial audit recorded in `docs/media-analysis-v2-audio-profile-audit.md`.
+       - `73:57` live point ending. Initial audit recorded.
+       - `74:27` speech-heavy recap tail. Initial audit recorded.
+       - `81:27` live point ending. Initial audit recorded.
+       - `82:22` replay/recap/back-anchor case. Initial audit recorded.
+   - add regression tests from manual labels before wiring profile scores into event promotion
+   - first implementation should be observable only:
+     - save `audioProfile`
+     - save derived summaries/hints
+     - keep event count stable until audit confirms the signals
+6. Improve OCR sampling around audio peaks and reaction-like anchors.
+   - sample scoreboard frames around high-value audio peaks, not only around transcript keyword peaks
+   - prioritize V2-owned OCR sampling around `reactionLikePeaks` and episode primary anchors, not speech/commentary tails
+   - build a V2-owned OCR sampling manifest around reaction-like anchors. Implemented as audit-only.
+     - script: `backend/scripts/audit-v2-ocr-sampling-plan.mjs`
+     - latest notes: `docs/media-analysis-v2-ocr-sampling-plan.md`
+     - samples are now audio-aware, not only fixed offsets:
+       - `setup_or_quiet_before`
+       - `action_or_rally_context`
+       - `reaction_start`
+       - `reaction_peak`
+       - `scoreboard_settle`
+       - `tail_or_context_check`
+     - fixed offsets are retained only as fallback fill-ins
+     - optional frame extraction is available with `--extract-frames=/tmp/path`; it writes candidate JPEGs plus `manifest.json`
+     - current finding: legacy OCR context is too sparse/stale for `40:54` and `79:41`, so V2 must sample exact frames around the reaction-like anchor
+     - manual video validation:
+       - `79:40.3` samples are good; `79:49`-`79:56` is replay
+       - `40:54.8` samples are good; `40:59`-`41:09` is bench/spectator tail, not replay
+   - use the audit-only score-context queue before broad attribution:
+     - implemented as `backend/scripts/audit-v2-score-context-candidates.mjs`
+     - latest notes are in `docs/media-analysis-v2-score-context-audit.md`
+     - current finding: `79:41` has a valid audio candidate but lacks reliable transcript score/outcome evidence, so it should wait for OCR/video confirmation
+     - current finding: `85:02` is pressure/setup-only and should not become a result event
+     - current finding: `86:59` is post-match score context/broadcaster animation and should not emit a live event
+   - use OCR before/after score state to reduce `unknown` score transitions
+   - keep missing OCR neutral rather than rejecting transcript-supported events
+   - record scoreboard visibility separately from replay/recap status, because scoreboard can be present during replay and absent during bench/changeover/player-closeup coverage
+7. Add an LLM window adjudication step only for ambiguous/high-value windows.
+   - provide previous/current/next transcript, audio peak metadata, audio profile summaries, OCR before/after state, segment type, and known participants
+   - include audio facts such as:
+     - possible action start
+     - possible action end
+     - reaction start
+     - point duration estimate
+     - rally texture score
+     - reaction burst score
+     - speech/music/commentary dominance
+     - episode primary/tail roles
+   - request structured output: event type, window facets, anchor time, confidence, and evidence reason
+   - use this to adjudicate ambiguous windows, not as a whole-transcript replacement for deterministic evidence
+   - use the current wording-based audio-led promotion rules only as temporary conservative guardrails
+   - long term, prefer an LLM event-window judge over expanding phrase lists, because commentator style, language, and ASR wording vary heavily
+   - deterministic code should still enforce safety after LLM output: no unanchored replay primary events, no unsupported result promotion, and no time-only merging of close real points
+8. Convert findings into regression tests before broad tuning.
+   - vague praise with no support attaches to nearby candidate or stays low-confidence `crowd_reaction` / no event
+   - vague praise plus tennis context and audio can become candidate `point_won`
+   - audio peak plus score movement can promote to a result event
+   - later recap/changeover language is secondary and does not duplicate the live result
+   - adjacent tennis points remain separate when the evidence supports separate moments
+   - short-point audio texture does not require a long rally prelude
+   - long-rally texture plus reaction can improve clip start/end boundaries
+   - music/changeover beds do not create fresh live point events
+   - speech-heavy commentator/referee/player bursts do not override a nearby stronger reaction anchor
+
+Edge cases to keep visible:
+
+- commentator reaction arrives seconds after the actual shot
+- transcript says `brilliant` / `impressive` without score or shot description
+- scoreboard OCR is missing during the actual live result
+- scoreboard absence is not proof of replay; it can also mean bench, changeover, player reaction, crowd shot, or camera cutaway
+- scoreboard presence is not proof of live play; replay/slow-motion can still carry a scoreboard or score bug
+- OCR appears later after the next game has started
+- crowd noise is sustained rather than a distinct reaction peak
+- replay audio or crowd sweetening looks energetic but is not live play
+- changeover/bench/rest coverage describes a result that already happened
+- pressure states such as break point, set point, or match point are not automatically results
+- game, set, and match results need different score scopes
+- same-type duplicate suppression must not merge consecutive real points
+- slow-motion peaks can carry the correct event label but the wrong live timestamp
+- slow-motion OCR context can be related to the previous point but still be too late to confirm the live endpoint without score transition
+- transcript at the next serve can still describe the previous point
+- next-point setup can be an important start marker for the next rally even when the transcript still describes the previous point
+- bench/changeover and replay/slow-motion often overlap; keep them as facets on one window rather than separate primary moments
+- changeover/break windows are useful tennis structure signals because they usually occur between games or sets
+- crowd/atmosphere peaks are usually endpoint evidence for nearby tennis moments, not standalone highlights
+- audio-led promotion must be able to anchor back from replay/recap peaks to the earlier live point ending
 
 ## Verification
 
