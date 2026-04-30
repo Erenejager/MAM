@@ -82,7 +82,7 @@ Optional:
 3. For each frame:
    - Read image, record `image_width` and `image_height` in original pixels
    - Run `model.predict(frame, conf=threshold, verbose=False)`
-   - Take highest-confidence detection if any
+   - If multiple detections: sort by confidence descending, take the highest-confidence bbox, ignore the rest (v1)
    - Clip bbox to image bounds, round to integer pixels; if resulting box has zero area treat as no detection
    - If detected: crop bbox region, save to `{output}/{frame_stem}_crop.jpg`, set `visible: true`
    - If not detected: set `visible: false`, no crop written
