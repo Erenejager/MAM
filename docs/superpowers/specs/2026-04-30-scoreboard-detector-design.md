@@ -36,15 +36,19 @@ Python dependencies (`requirements.txt`):
 - `onnxruntime-cpu`
 - `opencv-python-headless`
 - `numpy`
+- `pytest` (for contract tests inside the image)
 
 Build note: install `opencv-python-headless` after `ultralytics` with `--force-reinstall` to prevent ultralytics from pulling in the GUI opencv variant.
 
 ENTRYPOINT: `["python", "detect.py"]`
 
+Future note: ultralytics pulls heavier dependencies. For CPU production a pure `onnxruntime` + `opencv-python-headless` implementation would be lighter. Not a blocker for v1.
+
 ## CLI
 
 ```bash
 docker run --rm \
+  --user "$(id -u):$(id -g)" \
   -v /home/clawdbot/MAM/models/scoreboard-yolo:/models:ro \
   -v /path/to/frames:/input:ro \
   -v /path/to/output:/output \
@@ -53,6 +57,8 @@ docker run --rm \
   --input /input \
   --output /output
 ```
+
+`--user "$(id -u):$(id -g)"` ensures output files are owned by the calling user, not root.
 
 Arguments:
 - `--model` — path to `.onnx` model file (required)
@@ -77,12 +83,13 @@ Optional:
    - Read image, record `image_width` and `image_height` in original pixels
    - Run `model.predict(frame, conf=threshold, verbose=False)`
    - Take highest-confidence detection if any
+   - Clip bbox to image bounds, round to integer pixels; if resulting box has zero area treat as no detection
    - If detected: crop bbox region, save to `{output}/{frame_stem}_crop.jpg`, set `visible: true`
    - If not detected: set `visible: false`, no crop written
    - If decode fails: emit `error: "decode_failed"`, log `WARN {frame} decode_failed` to stderr
 4. Write `results.json` to `--output/`
 
-Bbox coordinates are in original image pixels (not 640-resized space). Ultralytics rescales automatically.
+Bbox coordinates are integer pixels in original image space (not 640-resized space). Ultralytics rescales automatically.
 
 ## Output Format
 
@@ -117,7 +124,10 @@ Single `results.json` array, one entry per input frame:
 Required fields on every row: `frame`, `visible`, `confidence`, `bbox`, `crop_path`, `image_width`, `image_height`, `source`.
 
 `crop_path` is a filename only (e.g. `frame_0042_crop.jpg`), not a container path. The caller reconstructs the full host path from its own output directory.
+
 Optional field: `error` (only present on failure rows).
+
+Bbox contract: integer pixels, clipped to `[0, image_width]` × `[0, image_height]`. Zero-area boxes after clipping are treated as no detection (`visible: false`).
 
 ## Error Handling
 
@@ -127,6 +137,7 @@ Optional field: `error` (only present on failure rows).
 | Input dir not found or empty | Exit 1, message to stderr, no `results.json` |
 | Output dir not writable | Exit 1, message to stderr, no `results.json` |
 | Frame decode failure | Exit 0, row with `error: "decode_failed"`, `WARN {frame} decode_failed` to stderr |
+| Zero-area bbox after clipping | Treat as no detection, `visible: false`, no crop |
 | Uncaught exception | Exit 1, traceback to stderr, no `results.json` |
 
 Stderr warning format: `WARN {frame} {reason}` — concise and machine-readable.
@@ -137,6 +148,7 @@ Stderr warning format: `WARN {frame} {reason}` — concise and machine-readable.
 
 ```bash
 docker run --rm \
+  --user "$(id -u):$(id -g)" \
   -v /home/clawdbot/MAM/models/scoreboard-yolo:/models:ro \
   -v /tmp/v2-ocr-sampling-audio-aware-smoke:/input:ro \
   -v /tmp/v2-scoreboard-crops:/output \
@@ -148,25 +160,30 @@ docker run --rm \
 cat /tmp/v2-scoreboard-crops/results.json | python3 -m json.tool
 ```
 
-Success: exit 0, one row per input frame, crop JPEGs written for visible detections.
+Success: exit 0, one row per input frame, crop JPEGs written for visible detections, files owned by calling user.
 
 ### pytest contract tests (validates CLI behavior and output schema)
 
 File: `tools/scoreboard-detector/tests/test_contract.py`
 
 Tests:
-- `test_missing_model_exits_1` — nonexistent model path → exit 1
-- `test_missing_input_exits_1` — nonexistent input dir → exit 1
+- `test_missing_model_exits_1` — nonexistent model path → exit 1 (no model load)
+- `test_missing_input_exits_1` — nonexistent input dir → exit 1 (no model load)
 - `test_corrupt_frame_exits_0` — garbage bytes as `.jpg` → exit 0, one row, `error: "decode_failed"`
 - `test_one_row_per_frame` — synthetic 10×10 blank JPEG → exit 0, exactly one row
 - `test_required_fields` — same run, assert all required fields present on every row
 
-Run inside the image:
+The three frame tests require the real ONNX model. Run with the model mounted:
+
 ```bash
-docker run --rm scoreboard-detector pytest tests/
+docker run --rm \
+  --entrypoint pytest \
+  -v /home/clawdbot/MAM/models/scoreboard-yolo:/models:ro \
+  scoreboard-detector tests/ \
+  --model-path /models/best.onnx
 ```
 
-Missing-model/input tests fail fast (no model load). Frame tests load the ONNX model once (~2s). Expected total: 5–8s.
+Tests receive the model path via a `--model-path` pytest option (declared in `conftest.py`). Missing-model/input tests fail fast. Frame tests load the model once (~2s). Expected total: 5–8s.
 
 ## Output Directories
 
@@ -177,4 +194,4 @@ Missing-model/input tests fail fast (no model load). Frame tests load the ONNX m
 
 ## Pipeline Integration
 
-The Node.js pipeline calls the detector via `child_process.execFile('docker', [...])`. On exit 0, it reads `results.json`. On exit 1, the batch is treated as failed — OCR evidence for that asset is skipped or retried.
+The Node.js pipeline calls the detector via `child_process.execFile('docker', [...])`, always passing `--user "$(id -u):$(id -g)"`. On exit 0, it reads `results.json`. On exit 1, the batch is treated as failed — OCR evidence for that asset is skipped or retried.
