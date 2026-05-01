@@ -76,6 +76,10 @@ export interface AudioProfileFrame {
   zeroCrossingRate: number;
   silenceRatio: number;
   burstScore: number;
+  spectralCentroid: number;
+  spectralRolloff: number;
+  spectralFlatness: number;
+  spectralFlux: number;
 }
 
 export interface AudioProfileWindowSummary {
@@ -95,6 +99,12 @@ export interface AudioProfileWindowSummary {
   strongestAttackTime: number | null;
   strongestAttackScore: number;
   zeroCrossingRateMean: number;
+  spectralCentroidMean: number;
+  spectralCentroidStdDev: number;
+  spectralRolloffMean: number;
+  spectralFlatnessMean: number;
+  spectralFluxMean: number;
+  spectralFluxMax: number;
   onsetRegularity: number;
   rallyTextureScore: number;
   reactionBurstScore: number;
@@ -102,6 +112,11 @@ export interface AudioProfileWindowSummary {
   musicBedScore: number;
   umpireAnnouncementScore: number;
   applauseCrowdScore: number;
+  crowdScore: number;
+  commentatorScore: number;
+  umpireScore: number;
+  playerVocalizationScore: number;
+  musicScore: number;
   pointShapeHint: 'short_point' | 'medium_rally' | 'long_rally' | 'reaction_only' | 'recap_only' | 'unknown';
   context?: AudioProfileContextHint;
 }
@@ -116,6 +131,11 @@ export interface AudioProfileContextHint {
   speechDominanceScore: number;
   musicBedScore: number;
   applauseCrowdScore: number;
+  crowdScore: number;
+  commentatorScore: number;
+  umpireScore: number;
+  playerVocalizationScore: number;
+  musicScore: number;
   pointShapeHint: AudioProfileWindowSummary['pointShapeHint'];
   suppressionReasons: Array<
     | 'high_speech_density'

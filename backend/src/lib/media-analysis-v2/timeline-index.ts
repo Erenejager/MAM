@@ -173,6 +173,11 @@ function deriveContextHint(
     speechDominanceScore: round3(clamp01(summary.speechDominanceScore + speechBoost)),
     musicBedScore: round3(clamp01(summary.musicBedScore + musicBoost)),
     applauseCrowdScore: round3(clamp01(summary.applauseCrowdScore - replayPenalty - (highSpeechPenalty * 0.35))),
+    crowdScore: round3(clamp01(summary.crowdScore - replayPenalty - (highSpeechPenalty * 0.35))),
+    commentatorScore: round3(clamp01(summary.commentatorScore + speechBoost + (context.hasCommentaryCue ? 0.08 : 0))),
+    umpireScore: round3(clamp01(summary.umpireScore - replayPenalty + (context.hasScoreCue ? 0.05 : 0))),
+    playerVocalizationScore: round3(clamp01(summary.playerVocalizationScore - replayPenalty - (highSpeechPenalty * 0.5))),
+    musicScore: round3(clamp01(summary.musicScore + musicBoost)),
   };
 
   if (adjusted.speechDominanceScore >= 0.78) suppressionReasons.push('speech_dominance');

@@ -242,25 +242,63 @@ function selectScoreboardSamplePoints(
 ): Array<{ label: string; source: 'audio' | 'fallback'; time: number }> {
   const oneSecond = timelineIndex.audioProfile?.summaries.oneSecond ?? [];
   const points: Array<{ label: string; source: 'audio' | 'fallback'; time: number }> = [];
-  const bestBefore = bestSummaryInRange(oneSecond, anchorTime - 10, anchorTime - 2, (summary) =>
+  const preScoreBaseline = bestSummaryInRange(oneSecond, anchorTime - 35, anchorTime - 8, (summary) =>
+    (summary.silenceRatio ?? 0) * 0.35 +
+    (summary.context?.speechDominanceScore ?? summary.speechDominanceScore ?? 0) * 0.15 -
+    (summary.context?.reactionBurstScore ?? summary.reactionBurstScore ?? 0) * 0.35 -
+    (summary.context?.rallyTextureScore ?? summary.rallyTextureScore ?? 0) * 0.25 -
+    (summary.rmsEnergy ?? 0) * 0.1,
+  );
+  const bestBefore = bestSummaryInRange(oneSecond, anchorTime - 12, anchorTime - 2, (summary) =>
     (summary.context?.rallyTextureScore ?? summary.rallyTextureScore ?? 0) * 0.6 +
     (summary.activeDuration ?? 0) * 0.25 -
     (summary.context?.speechDominanceScore ?? summary.speechDominanceScore ?? 0) * 0.2,
   );
-  const bestSettle = bestSummaryInRange(oneSecond, anchorTime + 2, anchorTime + 8, (summary) =>
+  const reactionPeak = bestSummaryInRange(oneSecond, anchorTime - 1, anchorTime + 4, (summary) =>
+    (summary.context?.reactionBurstScore ?? summary.reactionBurstScore ?? 0) * 0.45 +
+    (summary.rmsEnergy ?? 0) * 0.35 +
+    (summary.energyMax ?? 0) * 0.2,
+  );
+  const scoreUpdateCandidate = bestSummaryInRange(oneSecond, anchorTime + 3, anchorTime + 10, (summary) =>
     (summary.silenceRatio ?? 0) * 0.3 +
     (summary.activeDuration ?? 0) * 0.2 -
-    Math.abs((summary.rmsEnergy ?? 0) - 0.35) * 0.2,
+    Math.abs((summary.rmsEnergy ?? 0) - 0.3) * 0.2 -
+    (summary.context?.reactionBurstScore ?? summary.reactionBurstScore ?? 0) * 0.1,
+  );
+  const lateSettle = bestSummaryInRange(oneSecond, anchorTime + 8, anchorTime + 18, (summary) =>
+    (summary.silenceRatio ?? 0) * 0.35 +
+    (summary.context?.speechDominanceScore ?? summary.speechDominanceScore ?? 0) * 0.15 -
+    (summary.context?.reactionBurstScore ?? summary.reactionBurstScore ?? 0) * 0.25 -
+    (summary.rmsEnergy ?? 0) * 0.1,
+  );
+  const nextPointSetup = bestSummaryInRange(oneSecond, anchorTime + 14, anchorTime + 26, (summary) =>
+    (summary.silenceRatio ?? 0) * 0.25 +
+    (summary.context?.speechDominanceScore ?? summary.speechDominanceScore ?? 0) * 0.25 +
+    (summary.context?.rallyTextureScore ?? summary.rallyTextureScore ?? 0) * 0.15 -
+    (summary.context?.reactionBurstScore ?? summary.reactionBurstScore ?? 0) * 0.25,
   );
 
-  if (bestBefore) points.push({ label: 'action_or_rally_context', source: 'audio', time: midpoint(bestBefore.start, bestBefore.end) });
+  if (preScoreBaseline) points.push({ label: 'pre_score_baseline', source: 'audio', time: midpoint(preScoreBaseline.start, preScoreBaseline.end) });
+  if (bestBefore) points.push({ label: 'pre_point_score_context', source: 'audio', time: midpoint(bestBefore.start, bestBefore.end) });
+  points.push({ label: 'action_or_rally_context', source: bestBefore ? 'audio' : 'fallback', time: bestBefore ? midpoint(bestBefore.start, bestBefore.end) : anchorTime - 5 });
   points.push({ label: 'reaction_start', source: 'audio', time: anchorTime });
+  if (reactionPeak) points.push({ label: 'reaction_peak', source: 'audio', time: midpoint(reactionPeak.start, reactionPeak.end) });
   points.push({
-    label: 'scoreboard_settle',
-    source: bestSettle ? 'audio' : 'fallback',
-    time: bestSettle ? midpoint(bestSettle.start, bestSettle.end) : anchorTime + 5,
+    label: 'score_update_candidate',
+    source: scoreUpdateCandidate ? 'audio' : 'fallback',
+    time: scoreUpdateCandidate ? midpoint(scoreUpdateCandidate.start, scoreUpdateCandidate.end) : anchorTime + 6,
+  });
+  points.push({
+    label: 'late_settle_score_check',
+    source: lateSettle ? 'audio' : 'fallback',
+    time: lateSettle ? midpoint(lateSettle.start, lateSettle.end) : anchorTime + 14,
   });
   points.push({ label: 'tail_or_context_check', source: 'fallback', time: anchorTime + 12 });
+  points.push({
+    label: 'next_point_setup_score_check',
+    source: nextPointSetup ? 'audio' : 'fallback',
+    time: nextPointSetup ? midpoint(nextPointSetup.start, nextPointSetup.end) : anchorTime + 22,
+  });
 
   return dedupeSamplePoints(points)
     .map((point) => ({

@@ -93,6 +93,12 @@ function audioProfileForSummaries(
         strongestAttackTime: summary.strongestAttackTime ?? summary.start + 0.5,
         strongestAttackScore: summary.strongestAttackScore ?? 0.16,
         zeroCrossingRateMean: summary.zeroCrossingRateMean ?? 0.25,
+        spectralCentroidMean: summary.spectralCentroidMean ?? 1600,
+        spectralCentroidStdDev: summary.spectralCentroidStdDev ?? 200,
+        spectralRolloffMean: summary.spectralRolloffMean ?? 2800,
+        spectralFlatnessMean: summary.spectralFlatnessMean ?? 0.45,
+        spectralFluxMean: summary.spectralFluxMean ?? 0.35,
+        spectralFluxMax: summary.spectralFluxMax ?? 0.6,
         onsetRegularity: summary.onsetRegularity ?? 0,
         rallyTextureScore: summary.rallyTextureScore ?? 0.72,
         reactionBurstScore: summary.reactionBurstScore ?? 0.72,
@@ -100,6 +106,11 @@ function audioProfileForSummaries(
         musicBedScore: summary.musicBedScore ?? 0.25,
         umpireAnnouncementScore: summary.umpireAnnouncementScore ?? 0.35,
         applauseCrowdScore: summary.applauseCrowdScore ?? 0.55,
+        crowdScore: summary.crowdScore ?? 0.58,
+        commentatorScore: summary.commentatorScore ?? 0.48,
+        umpireScore: summary.umpireScore ?? 0.42,
+        playerVocalizationScore: summary.playerVocalizationScore ?? 0.5,
+        musicScore: summary.musicScore ?? 0.3,
         pointShapeHint: summary.pointShapeHint ?? 'short_point',
         context: summary.context ?? {
           speechDensity: 0.45,
@@ -111,6 +122,11 @@ function audioProfileForSummaries(
           speechDominanceScore: 0.5,
           musicBedScore: 0.25,
           applauseCrowdScore: 0.55,
+          crowdScore: 0.58,
+          commentatorScore: 0.48,
+          umpireScore: 0.42,
+          playerVocalizationScore: 0.5,
+          musicScore: 0.3,
           pointShapeHint: 'short_point',
           suppressionReasons: [],
         },
@@ -164,6 +180,12 @@ describe('media-analysis-v2 audio peaks', () => {
     expect(profile.frames[2].energyDelta).toBeGreaterThan(0.6);
     expect(profile.frames[2].burstScore).toBeGreaterThan(0.7);
     expect(profile.frames[2].zeroCrossingRate).toBeGreaterThan(0.5);
+    expect(profile.frames[2]).toMatchObject({
+      spectralCentroid: expect.any(Number),
+      spectralRolloff: expect.any(Number),
+      spectralFlatness: expect.any(Number),
+      spectralFlux: expect.any(Number),
+    });
     expect(profile.summaries.oneSecond).toHaveLength(2);
     expect(profile.summaries.fiveSecond).toHaveLength(1);
     expect(profile.summaries.oneSecond[1]).toMatchObject({
@@ -176,17 +198,32 @@ describe('media-analysis-v2 audio peaks', () => {
       sustainedLoudnessDuration: 1,
       strongestAttackTime: 1.25,
       zeroCrossingRateMean: 0.8,
+      spectralCentroidMean: expect.any(Number),
+      spectralFlatnessMean: expect.any(Number),
+      spectralFluxMax: expect.any(Number),
       reactionBurstScore: 1,
       applauseCrowdScore: expect.any(Number),
+      crowdScore: expect.any(Number),
+      playerVocalizationScore: expect.any(Number),
       pointShapeHint: expect.any(String),
     });
     expect(profile.summaries.oneSecond[1].applauseCrowdScore).toBeGreaterThan(0.8);
     expect(profile.summaries.fiveSecond[0]).toMatchObject({
       onsetRegularity: expect.any(Number),
+      spectralCentroidMean: expect.any(Number),
+      spectralCentroidStdDev: expect.any(Number),
+      spectralFlatnessMean: expect.any(Number),
+      spectralFluxMean: expect.any(Number),
+      spectralFluxMax: expect.any(Number),
       rallyTextureScore: expect.any(Number),
       speechDominanceScore: expect.any(Number),
       musicBedScore: expect.any(Number),
       umpireAnnouncementScore: expect.any(Number),
+      crowdScore: expect.any(Number),
+      commentatorScore: expect.any(Number),
+      umpireScore: expect.any(Number),
+      playerVocalizationScore: expect.any(Number),
+      musicScore: expect.any(Number),
     });
   });
 
@@ -4912,6 +4949,10 @@ describe('media-analysis-v2 ranking and summary', () => {
           zeroCrossingRate: 0.1,
           silenceRatio: 0.2,
           burstScore: 0.56,
+          spectralCentroid: 1400,
+          spectralRolloff: 2600,
+          spectralFlatness: 0.4,
+          spectralFlux: 0,
         }],
         summaries: {
           oneSecond: [{
@@ -4931,6 +4972,12 @@ describe('media-analysis-v2 ranking and summary', () => {
             strongestAttackTime: 0.25,
             strongestAttackScore: 0.5,
             zeroCrossingRateMean: 0.1,
+            spectralCentroidMean: 1400,
+            spectralCentroidStdDev: 0,
+            spectralRolloffMean: 2600,
+            spectralFlatnessMean: 0.4,
+            spectralFluxMean: 0,
+            spectralFluxMax: 0,
             onsetRegularity: 0,
             rallyTextureScore: 0.5,
             reactionBurstScore: 0.6,
@@ -4938,6 +4985,11 @@ describe('media-analysis-v2 ranking and summary', () => {
             musicBedScore: 0.2,
             umpireAnnouncementScore: 0.3,
             applauseCrowdScore: 0.5,
+            crowdScore: 0.5,
+            commentatorScore: 0.4,
+            umpireScore: 0.3,
+            playerVocalizationScore: 0.4,
+            musicScore: 0.2,
             pointShapeHint: 'short_point',
           }],
           fiveSecond: [{
@@ -4957,6 +5009,12 @@ describe('media-analysis-v2 ranking and summary', () => {
             strongestAttackTime: 0.25,
             strongestAttackScore: 0.5,
             zeroCrossingRateMean: 0.1,
+            spectralCentroidMean: 1400,
+            spectralCentroidStdDev: 0,
+            spectralRolloffMean: 2600,
+            spectralFlatnessMean: 0.4,
+            spectralFluxMean: 0,
+            spectralFluxMax: 0,
             onsetRegularity: 0,
             rallyTextureScore: 0.5,
             reactionBurstScore: 0.6,
@@ -4964,6 +5022,11 @@ describe('media-analysis-v2 ranking and summary', () => {
             musicBedScore: 0.2,
             umpireAnnouncementScore: 0.3,
             applauseCrowdScore: 0.5,
+            crowdScore: 0.5,
+            commentatorScore: 0.4,
+            umpireScore: 0.3,
+            playerVocalizationScore: 0.4,
+            musicScore: 0.2,
             pointShapeHint: 'short_point',
           }],
         },

@@ -160,6 +160,10 @@ function buildAudioProfileFrames(
     peak: number;
     zeroCrossingRate: number;
     silenceRatio: number;
+    spectralCentroid: number;
+    spectralRolloff: number;
+    spectralFlatness: number;
+    spectrum: number[];
   }> = [];
 
   for (let index = 0; index < frameCount; index++) {
@@ -172,11 +176,16 @@ function buildAudioProfileFrames(
       start,
       end,
       ...measureSamples(samples, startSample, endSample),
+      ...measureSpectralFeatures(samples, startSample, endSample, sampleRate),
     });
   }
 
   const maxRms = Math.max(...rawFrames.map((frame) => frame.rms), 1);
   const maxPeak = Math.max(...rawFrames.map((frame) => frame.peak), 1);
+  const rawFluxes = rawFrames.map((frame, index) =>
+    index > 0 ? computeSpectralFlux(rawFrames[index - 1].spectrum, frame.spectrum) : 0,
+  );
+  const maxFlux = Math.max(...rawFluxes, 1);
 
   return rawFrames.map((frame, index) => {
     const rmsEnergy = round3(frame.rms / maxRms);
@@ -194,6 +203,10 @@ function buildAudioProfileFrames(
       zeroCrossingRate: round3(frame.zeroCrossingRate),
       silenceRatio: round3(frame.silenceRatio),
       burstScore,
+      spectralCentroid: round3(frame.spectralCentroid),
+      spectralRolloff: round3(frame.spectralRolloff),
+      spectralFlatness: round3(frame.spectralFlatness),
+      spectralFlux: round3(rawFluxes[index] / maxFlux),
     };
   });
 }
@@ -226,6 +239,8 @@ function summarizeAudioProfileWindows(
     const activeDuration = activeFrames.reduce((sum, frame) => sum + frameDuration(frame), 0);
     const sustainedLoudnessDuration = sustainedFrames.reduce((sum, frame) => sum + frameDuration(frame), 0);
     const strongestAttackScore = Math.max(0, strongestAttack?.energyDelta ?? 0);
+    const spectralCentroids = contained.map((frame) => frame.spectralCentroid);
+    const spectralFluxes = contained.map((frame) => frame.spectralFlux);
     const hints = deriveAudioProfileHints({
       windowSize: Math.max(1, end - start),
       energyMean,
@@ -239,6 +254,12 @@ function summarizeAudioProfileWindows(
       sustainedLoudnessDuration,
       strongestAttackScore,
       zeroCrossingRateMean,
+      spectralCentroidMean: mean(spectralCentroids),
+      spectralCentroidStdDev: stdDev(spectralCentroids),
+      spectralRolloffMean: mean(contained.map((frame) => frame.spectralRolloff)),
+      spectralFlatnessMean: mean(contained.map((frame) => frame.spectralFlatness)),
+      spectralFluxMean: mean(spectralFluxes),
+      spectralFluxMax: spectralFluxes.length > 0 ? Math.max(...spectralFluxes) : 0,
     });
 
     summaries.push({
@@ -258,6 +279,12 @@ function summarizeAudioProfileWindows(
       strongestAttackTime: strongestAttack ? round3((strongestAttack.start + strongestAttack.end) / 2) : null,
       strongestAttackScore: round3(strongestAttackScore),
       zeroCrossingRateMean: round3(zeroCrossingRateMean),
+      spectralCentroidMean: round3(mean(spectralCentroids)),
+      spectralCentroidStdDev: round3(stdDev(spectralCentroids)),
+      spectralRolloffMean: round3(mean(contained.map((frame) => frame.spectralRolloff))),
+      spectralFlatnessMean: round3(mean(contained.map((frame) => frame.spectralFlatness))),
+      spectralFluxMean: round3(mean(spectralFluxes)),
+      spectralFluxMax: round3(spectralFluxes.length > 0 ? Math.max(...spectralFluxes) : 0),
       onsetRegularity: round3(onsetRegularity),
       ...hints,
     });
@@ -279,6 +306,12 @@ function deriveAudioProfileHints(features: {
   sustainedLoudnessDuration: number;
   strongestAttackScore: number;
   zeroCrossingRateMean: number;
+  spectralCentroidMean: number;
+  spectralCentroidStdDev: number;
+  spectralRolloffMean: number;
+  spectralFlatnessMean: number;
+  spectralFluxMean: number;
+  spectralFluxMax: number;
 }): Pick<AudioProfileWindowSummary,
   | 'rallyTextureScore'
   | 'reactionBurstScore'
@@ -286,6 +319,11 @@ function deriveAudioProfileHints(features: {
   | 'musicBedScore'
   | 'umpireAnnouncementScore'
   | 'applauseCrowdScore'
+  | 'crowdScore'
+  | 'commentatorScore'
+  | 'umpireScore'
+  | 'playerVocalizationScore'
+  | 'musicScore'
   | 'pointShapeHint'
 > {
   const activeRatio = clamp01(features.activeDuration / features.windowSize);
@@ -298,6 +336,14 @@ function deriveAudioProfileHints(features: {
   const attackScore = clamp01(features.strongestAttackScore / 0.35);
   const highEnergyScore = clamp01(features.energyMax / 0.65);
   const nonSilentScore = clamp01(1 - features.silenceRatio);
+  const nyquist = 4000;
+  const midCentroidScore = clamp01(1 - Math.abs(features.spectralCentroidMean - 1400) / 1400);
+  const highCentroidScore = clamp01((features.spectralCentroidMean - 1200) / 1800);
+  const rolloffScore = clamp01(features.spectralRolloffMean / nyquist);
+  const flatnessScore = clamp01(features.spectralFlatnessMean);
+  const tonalScore = clamp01(1 - features.spectralFlatnessMean);
+  const fluxScore = clamp01(features.spectralFluxMean);
+  const fluxPeakScore = clamp01(features.spectralFluxMax);
 
   const rallyTextureScore = round3(
     0.35 * burstDensityScore
@@ -334,6 +380,39 @@ function deriveAudioProfileHints(features: {
     + 0.2 * sustainedRatio
     + 0.15 * burstDensityScore,
   );
+  const crowdScore = round3(
+    0.3 * applauseCrowdScore
+    + 0.25 * flatnessScore
+    + 0.2 * highEnergyScore
+    + 0.15 * noisyTextureScore
+    + 0.1 * rolloffScore,
+  );
+  const commentatorScore = round3(
+    0.35 * speechDominanceScore
+    + 0.25 * midCentroidScore
+    + 0.2 * lowVarianceScore
+    + 0.2 * tonalScore,
+  );
+  const umpireScore = round3(
+    0.35 * umpireAnnouncementScore
+    + 0.25 * speechDominanceScore
+    + 0.2 * attackScore
+    + 0.2 * (1 - sustainedRatio),
+  );
+  const playerVocalizationScore = round3(
+    0.3 * attackScore
+    + 0.25 * fluxPeakScore
+    + 0.2 * highCentroidScore
+    + 0.15 * nonSilentScore
+    + 0.1 * (1 - sustainedRatio),
+  );
+  const musicScore = round3(
+    0.3 * musicBedScore
+    + 0.25 * tonalScore
+    + 0.2 * features.onsetRegularity
+    + 0.15 * sustainedRatio
+    + 0.1 * fluxScore,
+  );
 
   return {
     rallyTextureScore,
@@ -342,6 +421,11 @@ function deriveAudioProfileHints(features: {
     musicBedScore,
     umpireAnnouncementScore,
     applauseCrowdScore,
+    crowdScore,
+    commentatorScore,
+    umpireScore,
+    playerVocalizationScore,
+    musicScore,
     pointShapeHint: inferPointShapeHint({
       activeRatio,
       rallyTextureScore,
@@ -440,6 +524,129 @@ function measureSamples(
     zeroCrossingRate: crossings / length,
     silenceRatio: silent / length,
   };
+}
+
+function measureSpectralFeatures(
+  samples: Int16Array,
+  start: number,
+  end: number,
+  sampleRate: number,
+): { spectralCentroid: number; spectralRolloff: number; spectralFlatness: number; spectrum: number[] } {
+  if (start >= samples.length || end <= start) {
+    return { spectralCentroid: 0, spectralRolloff: 0, spectralFlatness: 0, spectrum: [] };
+  }
+
+  const frameLength = end - start;
+  const fftSize = Math.max(32, nextPowerOfTwo(Math.min(512, frameLength)));
+  const real = new Float64Array(fftSize);
+  const imag = new Float64Array(fftSize);
+  const step = frameLength / fftSize;
+
+  for (let index = 0; index < fftSize; index++) {
+    const sampleIndex = Math.min(end - 1, start + Math.floor(index * step));
+    const window = 0.5 - 0.5 * Math.cos((2 * Math.PI * index) / Math.max(1, fftSize - 1));
+    real[index] = ((samples[sampleIndex] ?? 0) / 32768) * window;
+  }
+
+  fft(real, imag);
+
+  const binCount = Math.floor(fftSize / 2);
+  const magnitudes: number[] = [];
+  let magnitudeSum = 0;
+  let weightedFrequencySum = 0;
+  let logMagnitudeSum = 0;
+
+  for (let bin = 1; bin <= binCount; bin++) {
+    const magnitude = Math.sqrt(real[bin] ** 2 + imag[bin] ** 2);
+    const frequency = (bin * sampleRate) / fftSize;
+    magnitudes.push(magnitude);
+    magnitudeSum += magnitude;
+    weightedFrequencySum += frequency * magnitude;
+    logMagnitudeSum += Math.log(magnitude + 1e-12);
+  }
+
+  if (magnitudeSum <= 1e-12 || magnitudes.length === 0) {
+    return { spectralCentroid: 0, spectralRolloff: 0, spectralFlatness: 0, spectrum: magnitudes };
+  }
+
+  const rolloffThreshold = magnitudeSum * 0.85;
+  let cumulative = 0;
+  let spectralRolloff = 0;
+  for (let index = 0; index < magnitudes.length; index++) {
+    cumulative += magnitudes[index];
+    if (cumulative >= rolloffThreshold) {
+      spectralRolloff = ((index + 1) * sampleRate) / fftSize;
+      break;
+    }
+  }
+
+  const arithmeticMean = magnitudeSum / magnitudes.length;
+  const geometricMean = Math.exp(logMagnitudeSum / magnitudes.length);
+  const normalizedSpectrum = magnitudes.map((magnitude) => magnitude / magnitudeSum);
+
+  return {
+    spectralCentroid: weightedFrequencySum / magnitudeSum,
+    spectralRolloff,
+    spectralFlatness: clamp01(geometricMean / Math.max(arithmeticMean, 1e-12)),
+    spectrum: normalizedSpectrum,
+  };
+}
+
+function computeSpectralFlux(previous: number[], current: number[]): number {
+  const length = Math.max(previous.length, current.length);
+  if (length === 0) return 0;
+
+  let sum = 0;
+  for (let index = 0; index < length; index++) {
+    sum += Math.max(0, (current[index] ?? 0) - (previous[index] ?? 0)) ** 2;
+  }
+
+  return Math.sqrt(sum);
+}
+
+function fft(real: Float64Array, imag: Float64Array): void {
+  const n = real.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) {
+      j ^= bit;
+    }
+    j ^= bit;
+    if (i < j) {
+      [real[i], real[j]] = [real[j], real[i]];
+      [imag[i], imag[j]] = [imag[j], imag[i]];
+    }
+  }
+
+  for (let length = 2; length <= n; length <<= 1) {
+    const angle = (-2 * Math.PI) / length;
+    const wLengthReal = Math.cos(angle);
+    const wLengthImag = Math.sin(angle);
+
+    for (let i = 0; i < n; i += length) {
+      let wReal = 1;
+      let wImag = 0;
+      for (let j = 0; j < length / 2; j++) {
+        const evenIndex = i + j;
+        const oddIndex = evenIndex + length / 2;
+        const oddReal = real[oddIndex] * wReal - imag[oddIndex] * wImag;
+        const oddImag = real[oddIndex] * wImag + imag[oddIndex] * wReal;
+
+        real[oddIndex] = real[evenIndex] - oddReal;
+        imag[oddIndex] = imag[evenIndex] - oddImag;
+        real[evenIndex] += oddReal;
+        imag[evenIndex] += oddImag;
+
+        const nextWReal = wReal * wLengthReal - wImag * wLengthImag;
+        wImag = wReal * wLengthImag + wImag * wLengthReal;
+        wReal = nextWReal;
+      }
+    }
+  }
+}
+
+function nextPowerOfTwo(value: number): number {
+  return 2 ** Math.ceil(Math.log2(Math.max(1, value)));
 }
 
 function mean(values: number[]): number {
