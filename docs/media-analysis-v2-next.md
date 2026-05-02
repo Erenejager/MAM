@@ -8,25 +8,44 @@ Improve key-moment correctness and boundaries before building more agent/highlig
 
 Current saved state:
 
+- Audio-profile upgrade stage 1 is implemented:
+  - frame-level spectral fields are now emitted: `spectralCentroid`, `spectralRolloff`, `spectralFlatness`, `spectralFlux`
+  - 1s/5s summaries now aggregate spectral centroid, flatness, and flux
+  - new class-score fields are emitted beside the older heuristic scores:
+    - `crowdScore`
+    - `commentatorScore`
+    - `umpireScore`
+    - `playerVocalizationScore`
+    - `musicScore`
+  - transcript-context adjustment carries the new class scores without removing old fields
+  - new audit script: `backend/scripts/audit-v2-audio-map.mjs`
+  - verification completed:
+    - `npm run build` in `backend`
+    - `npx vitest run src/__tests__/media-analysis-v2.test.ts` with `89` passing tests
 - YOLO scoreboard detection is wired into V2 as an optional gated stage.
 - Audit OCR sampling can run YOLO with `--detect-scoreboard`.
 - Full-pipeline reference smoke completed with `60` scoreboard samples and `31` visible scoreboard frames.
 - Candidate adjudication packets can be generated for LLM validation:
   - `backend/scripts/audit-v2-candidate-adjudication-packets.mjs`
   - latest output path used: `/tmp/v2-candidate-adjudication-packets.json`
+- Candidate packets can now be sent to an audit-only LLM adjudication runner:
+  - `backend/scripts/audit-v2-adjudicate-candidates.mjs`
+  - latest top-five output: `/tmp/v2-candidate-adjudications-top5.json`
+  - latest known-target output with per-image scoreboard readings: `/tmp/v2-candidate-adjudications-known-targets-readings.json`
+  - latest redacted request dump: `/tmp/v2-candidate-known-target-llm-requests-readings.json`
+  - API/model used in tests: `gemini-2.5-flash-lite` through Google Gemini's OpenAI-compatible `/chat/completions` endpoint with `GEMINI_API_KEY`
 
 Continue with:
 
-1. Add the actual LLM adjudication audit call on top of the packet builder.
-2. Keep output audit-only first: write adjudication JSON beside the packets, do not mutate V2 events.
-3. Test first on the known review targets:
+1. Manually review the adjudication JSON before trusting it.
+2. Keep output audit-only: do not mutate V2 events from LLM rows yet.
+3. Re-test known review targets when packet construction or prompts change:
    - `37:48` break/game confirmation
    - `40:54` set win with stale/mixed OCR risk
    - `1:13:57` audio-led big point
-   - `79:40` unpromoted reaction candidate
-   - `85:02` pressure/setup-only
-   - `86:59` post-match/graphic
-4. Ask the LLM for structured fields:
+   - `1:15:57` hold for 4-2
+   - `1:21:27` break near victory
+4. Current LLM output fields:
    - `is_key_moment`
    - `moment_type`
    - `is_live_action`
@@ -38,7 +57,334 @@ Continue with:
    - `winner`
    - `confidence`
    - `reasoning`
-5. Only after manual review, wire trusted adjudication output into promotion or suppression logic.
+5. Use `auditFlags` in the adjudication output to identify rows needing manual review before any promotion/suppression wiring.
+6. Keep improving the LLM evidence packet before downstream wiring:
+   - V2 event labels and nearby events must remain explicitly marked as hypotheses.
+   - Legacy OCR free-text notes should stay out of the LLM prompt; structured score fields are safer.
+   - Require per-image `scoreboard_readings` so scoreboard mistakes can be audited.
+   - Preserve redacted request dumps when changing prompt/schema.
+   - Current payload cleanup:
+     - transcript now includes timed `beforeSegments`, `aroundSegments`, and `afterSegments`
+     - raw `candidateWindow` pipeline ids are converted into a simpler `candidate` object with timecodes
+     - pipeline event hypotheses no longer include internal confidence/status/reliability fields
+     - legacy structured score evidence is excluded by default and only sent with `--include-legacy-score-evidence`
+     - LLM-facing transcript is now sent as one deduped `transcript.segments` timeline, not overlapping before/around/after buckets
+     - current and nearby event hypotheses are sent as `pipelineEventContext.current`, `nearbyBefore`, and `nearbyAfter`; nearby groups exclude events already present in `current`
+     - selected scoreboard frames now include `timecode` and `secondsFromAudioAnchor`, and image attachment labels include the same timing context
+7. Only after manual review, wire trusted adjudication output into promotion or suppression logic.
+
+Latest grouped-context known-target run:
+
+- output: `/tmp/v2-candidate-adjudications-known-targets-event-context.json`
+- request dump: `/tmp/v2-candidate-known-target-llm-requests-event-context.json`
+- evaluator: `/tmp/v2-candidate-known-targets-event-context-eval.json`
+- current status: 3/5 clean pass; remaining issues are score normalization at `37:52` and set-win before/after handling at `40:57`
+
+Scoreboard extraction direction:
+
+- require per-frame extraction before adjudication:
+  - `scoreboard_available`
+  - `scoreboard_readable`
+  - rows with `player`, `isServing`, flexible ordered `scoreColumns`, and uncertainty fields
+  - `scoreColumns` uses zero-based left-to-right `columnIndex` and `kind`: `set_score`, `current_set_games`, `point_score`, `tiebreak_points`, or `unknown`
+- require `scoreboard_transition` derived from per-frame readings
+- removed free-form `score_before`, `score_after`, and `score_changed` from the LLM response schema
+- structured transition is now the only score-change surface
+- latest known-target no-freeform run: `/tmp/v2-candidate-adjudications-known-targets-no-freeform-score.json`
+- evaluator: `/tmp/v2-candidate-known-targets-no-freeform-score-eval.json`
+- current status: 4/5 clean pass; `40:57` is correct as `set_won`/`Djokovic` but remains flagged because no visible before/after transition is available in the attached frames
+- fallback correction for detector misses:
+  - before/action and reaction samples can now be attached as full-frame scoreboard-search evidence when YOLO misses the compact scoreboard
+  - fallback metadata keeps detector visibility separate from visual truth
+  - `40:57` now has readable full-frame `40:54` and `40:57` evidence and returns transition `true/set/Djokovic`
+- latest fallback artifacts:
+  - packets: `/tmp/v2-candidate-adjudication-packets-timed-fallback.json`
+  - focused full-frame output: `/tmp/v2-candidate-43-full-frame-fallback-result-retry.json`
+  - focused request dump: `/tmp/v2-candidate-43-full-frame-fallback-llm-request-retry.json`
+  - previous lower-left focused output: `/tmp/v2-candidate-43-scorebug-fallback-v2.json`
+  - known-target output: `/tmp/v2-candidate-adjudications-known-targets-scorebug-fallback.json`
+  - evaluator: `/tmp/v2-candidate-known-targets-scorebug-fallback-eval.json`
+- latest full-frame fallback known-target run:
+  - batch output: `/tmp/v2-candidate-adjudications-known-targets-full-frame-point-rule.json`
+  - request dump: `/tmp/v2-candidate-known-target-llm-requests-full-frame-point-rule.json`
+  - focused retry for batch 503: `/tmp/v2-candidate-80-full-frame-point-rule.json`
+  - combined result: 5/5 expected type/winner with no audit flags
+  - prompt/audit guard added for point-score row comparison, so `40/30 -> 40/40` is assigned to the row that changed from `30` to `40`
+- latest full-pipeline checkpoint:
+  - result: `/tmp/media-analysis-v2-full-pipeline-full-frame-check/media_analysis_v2/result.json`
+  - packets: `/tmp/v2-candidate-adjudication-packets-full-pipeline-check.json`
+  - adjudications: `/tmp/v2-candidate-adjudications-full-pipeline-known-targets.json`
+  - request dump: `/tmp/v2-candidate-full-pipeline-known-target-requests.json`
+  - pipeline: `246` segments, `18` events, scoreboard detector `complete`, `60` samples, `31` visible frames
+  - known-target adjudication: 5/5 expected type/winner, no audit flags, no Gemini failures
+
+Near-term audio follow-up:
+
+- next audio-profile validation step:
+  - rerun a full V2 analysis on the reference match so the saved result includes the new spectral/class-score fields
+  - run `node backend/scripts/audit-v2-audio-map.mjs <result.json> --limit=80 --min-score=0.5`
+  - review the output sections:
+    - top reaction moments
+    - top rally texture
+    - top crowd moments
+    - top player-vocalization spikes
+    - suppressed speech or music
+    - strong audio without candidate or event
+  - compare missed/false-positive clusters before changing `event-candidates.ts`
+  - only after that, add audio-first candidate paths for strong reaction/crowd spikes, rally-followed-by-reaction patterns, and player vocalization during active play
+  - keep old score fields and existing candidate behavior until the audit shows reliable thresholds
+- implemented compact `audio.timeline` in candidate adjudication packets, separate from score confirmation
+- current shape: one-second points from roughly `-8s` to `+24s` around the audio anchor with `timecode`, `secondsFromAudioAnchor`, `phaseHint`, energy/reaction/rally/speech/applause scores, and suppression hints
+- audio timeline now also carries per-second facet arrays:
+  - `audioFacets`
+  - `contextFacets`
+  - `opportunityFacets`
+  - `facetReasons`
+- candidate packets now include `audio.rollup`, a compact moment-level summary of the per-second facets:
+  - `primaryAnchorTimecode`
+  - `bestReaction`
+  - `bestRally`
+  - `preAnchorFacets`
+  - `anchorFacets`
+  - `postAnchorFacets`
+  - `hasSuppressiveTail`
+  - `suppressAsPrimary`
+  - `audioMomentOpportunity`
+- candidate packets now include `transcript.rollup`, a compact text-cue summary:
+  - `transcriptFacets`
+  - `cueCounts`
+  - `aroundCueCounts`
+  - `afterCueCounts`
+  - `cueExamples`
+  - `transcriptReview`
+- latest rollup validation artifacts:
+  - packets: `/tmp/v2-candidate-packets-transcript-rollup-check.json`
+  - request dump: `/tmp/v2-candidate-80-transcript-rollup-request.json`
+- current rollup check:
+  - known/live rows mostly classify as audio `strengthen_existing_event`
+  - post-match rows classify as audio `post_match_context`
+  - `candidate_window_89` surfaces as audio `probable_audio_moment` with transcript `action_or_score_context`
+- audio-first candidate audit report added:
+  - `backend/scripts/audit-v2-audio-first-candidates.mjs`
+  - latest command: `node backend/scripts/audit-v2-audio-first-candidates.mjs /tmp/v2-candidate-packets-transcript-rollup-check.json --limit=30`
+  - latest bucket counts:
+    - `covered_existing_event=10`
+    - `needs_scoreboard_confirmation=1`
+    - `boundary_or_tail_helper=2`
+    - `post_match_or_recap_suppress=2`
+  - current top audio-first review row:
+    - `candidate_window_89` at `1:19:42`
+    - `needs_scoreboard_confirmation`
+    - no current event
+    - `3` visible scoreboard samples
+  - LLM adjudication for `candidate_window_89`:
+    - output: `/tmp/v2-candidate-89-audio-first-adjudication-max4200.json`
+    - request dump: `/tmp/v2-candidate-89-audio-first-request-max4200.json`
+    - result: `point_won`, winner `Alcaraz`, live action, no audit flags
+    - scoreboard transition: Alcaraz point score `30 -> 40`, Djokovic stayed `40`
+- new reusable audit helper:
+  - `backend/scripts/lib/audio-facets.mjs`
+  - `backend/scripts/lib/transcript-rollup.mjs`
+- audio map audit now supports focused per-timecode and per-candidate inspection:
+  - `--time=MM:SS`
+  - `--candidate=candidate_window_id`
+  - `--timeline-radius=N`
+- latest notes:
+  - `docs/media-analysis-v2-audio-map-facet-audit.md`
+- implemented audio-aware scoreboard sampling for future detector runs:
+  - `pre_point_score_context`
+  - `reaction_peak`
+  - `score_update_candidate`
+  - `late_settle_score_check`
+  - `next_point_setup_score_check`
+- adjudication prompt now tells Gemini:
+  - reaction frames may still show pre-update score
+  - compare pre-point frames against update/late/setup frames
+  - use `changed=false` only when late after evidence is readable and unchanged
+  - use `changed=null` / `unknown` when frame timing is insufficient
+- next validation step:
+  - done: reran the full V2 pipeline with scoreboard detector enabled so the new sample labels are extracted
+  - final result: `/tmp/media-analysis-v2-audio-aware-scoreboard-tail-run/media_analysis_v2/result.json`
+  - final packets: `/tmp/v2-candidate-adjudication-packets-audio-aware-tail-fullrun.json`
+  - final all-15 adjudication: `/tmp/v2-candidate-adjudications-audio-aware-tail-all15.json`
+  - final request dump: `/tmp/v2-candidate-audio-aware-tail-all15-requests.json`
+  - result: `15/15` Gemini adjudications, `0` failures
+  - fixed row: `candidate_window_14` now confirms `game_won` / `Djokovic` from `1-1` to `1-2`
+  - remaining evidence gaps: `candidate_window_4`, `candidate_window_20`, and `candidate_window_98` still have readable frames but no visible score transition
+- next implementation step:
+  - first, run the audio-first audit + LLM adjudication on the full packet set and any newly surfaced audio candidates
+  - compare LLM results against `audio.rollup`, `transcript.rollup`, and current V2 events
+  - then add promotion tiers that distinguish confirmed scoreboard transitions from transcript/audio-led moments with static or missing scoreboard transition evidence
+  - consider broader visual search for flagged true moments where detector/Gemini still cannot see the update
+- guardrail: readable scoreboard transitions remain primary for what happened; audio timeline only helps temporality and action boundaries
+
+## Stop Point - 2026-05-02
+
+Session completed:
+
+- Added per-second audio facet derivation:
+  - `backend/scripts/lib/audio-facets.mjs`
+- Added transcript cue rollup:
+  - `backend/scripts/lib/transcript-rollup.mjs`
+- Added moment-level audio rollup in candidate packets:
+  - `audio.rollup`
+- Added transcript rollup in candidate packets:
+  - `transcript.rollup`
+- Updated packet generation and adjudication prompt/request payloads to carry these rollups.
+- Fixed packet generation `--include-no-scoreboard` so the broader audit includes candidate windows with no detector rows.
+- Added audit-only `--anchor-mode=rollup-earlier`:
+  - keeps raw audio peak as source identity
+  - uses rollup anchor only when it is earlier than the raw audio peak
+  - prevents positive-delta drift into recap/next-point moments
+- Added audio-first candidate triage report:
+  - `backend/scripts/audit-v2-audio-first-candidates.mjs`
+- Added uncovered-audio manual-review report:
+  - `backend/scripts/audit-v2-uncovered-audio-candidates.mjs`
+- Added audit-only promotion tier report:
+  - `backend/scripts/audit-v2-promotion-tiers.mjs`
+- Added raw audio highlight scanner:
+  - `backend/scripts/audit-v2-audio-highlight-candidates.mjs`
+- Added audit notes:
+  - `docs/media-analysis-v2-audio-map-facet-audit.md`
+- Validated the surfaced audio-first row:
+  - `candidate_window_89` at `1:19:42`
+  - LLM result: `point_won`, winner `Alcaraz`, live action, no audit flags
+  - scoreboard transition: Alcaraz point score `30 -> 40`, Djokovic stayed `40`
+
+Important artifacts:
+
+- packet file with audio/transcript rollups:
+  - `/tmp/v2-candidate-packets-transcript-rollup-check.json`
+- broader packet file including no-scoreboard candidates:
+  - `/tmp/v2-candidate-packets-transcript-rollup-full-audio-first.json`
+- rollup-earlier anchor packet file:
+  - `/tmp/v2-candidate-packets-rollup-earlier-anchor.json`
+- audio-first audit command:
+  - `node backend/scripts/audit-v2-audio-first-candidates.mjs /tmp/v2-candidate-packets-transcript-rollup-check.json --limit=30`
+- audio-first adjudication output:
+  - `/tmp/v2-candidate-89-audio-first-adjudication-max4200.json`
+- audio-first request dump:
+  - `/tmp/v2-candidate-89-audio-first-request-max4200.json`
+
+Next recommended session:
+
+1. Generate the broader audit packet set when the source V2 result changes:
+   - `node backend/scripts/audit-v2-candidate-adjudication-packets.mjs /tmp/media-analysis-v2-audio-aware-scoreboard-tail-run/media_analysis_v2/result.json --output=/tmp/v2-candidate-packets-transcript-rollup-full-audio-first.json --limit=200 --include-no-scoreboard`
+2. Run the audio-first audit:
+   - `node backend/scripts/audit-v2-audio-first-candidates.mjs /tmp/v2-candidate-packets-transcript-rollup-full-audio-first.json --limit=100`
+3. Current broad-audit result:
+   - packets: `26`
+   - target rows: only `candidate_window_89`
+   - no `probable_missed_audio_moment` rows
+4. Current rollup-earlier anchor result:
+   - bucket counts unchanged
+   - `candidate_window_89` shifted `1:19:42 -> 1:19:40` and still adjudicates cleanly as `point_won` for Alcaraz
+   - `candidate_window_43` shifted `40:57 -> 40:54`
+   - `candidate_window_42` stayed at `40:32`, avoiding drift into `candidate_window_43`
+5. Shifted known-candidate validation:
+   - `candidate_window_43` at `40:54`: clean `set_won` / Djokovic
+   - `candidate_window_40` at `37:48`: clean `game_won` / Djokovic
+   - `candidate_window_14` at `12:05`: clean `game_won` / Djokovic
+   - `candidate_window_22` at `23:02`: clean `point_won` / Djokovic
+   - `candidate_window_80` at `1:13:55`: clean `point_won` / Djokovic after retrying transient Gemini `503`
+   - artifacts:
+     - `/tmp/v2-known-shifted-rollup-earlier-adjudication.json`
+     - `/tmp/v2-candidate-80-rollup-earlier-anchor-adjudication.json`
+6. Next implementation step: design promotion tiers, still audit-only at first:
+   - confirmed scoreboard transition
+   - probable audio/transcript moment
+   - boundary/helper only
+   - suppress/post-match/recap
+
+Promotion tier audit:
+
+- Command:
+  - `node backend/scripts/audit-v2-promotion-tiers.mjs /tmp/v2-candidate-packets-pre-score-rollup-earlier-audio-first.json --adjudication=/tmp/v2-candidate-89-rollup-earlier-anchor-adjudication.json --adjudication=/tmp/v2-known-shifted-rollup-earlier-adjudication.json --adjudication=/tmp/v2-candidate-80-rollup-earlier-anchor-adjudication.json --limit=100`
+- Current tier counts:
+  - `confirmed_scoreboard_transition=6`
+  - `covered_existing_event=9`
+  - `boundary_or_tail_helper=7`
+  - `suppress_recap_or_post_match=4`
+- Important split:
+  - confirmed existing-event validation:
+    - `candidate_window_80`, `candidate_window_43`, `candidate_window_40`, `candidate_window_14`, `candidate_window_22`
+  - confirmed future-promotion candidate:
+    - `candidate_window_89`
+
+Raw Audio Highlight Scan:
+
+- Command:
+  - `node backend/scripts/audit-v2-audio-highlight-candidates.mjs /tmp/media-analysis-v2-pre-score-baseline-issues-run/media_analysis_v2/result.json --limit=80 --min-score=0.24 --cluster-gap=4`
+- This scans every audio-profile second and clusters highlight-like audio, including already-covered candidates.
+- Top covered rows:
+  - `1:19:40`
+  - `1:13:55`
+  - `37:48`
+  - `40:54`
+- Top uncovered/near-uncovered rows to review:
+  - `1:20` - currently `possible_audio_highlight_candidate`
+  - `11:33` - `weak_rally_texture`
+  - `1:05:03` - `weak_rally_texture`
+  - `1:17:43` - `weak_rally_texture`
+  - `39:27` - `weak_rally_texture`
+  - `1:10:57` - `low_priority_audio_context`
+  - `1:12:53` - `low_priority_audio_context`
+- Next tuning question:
+  - should `possible_audio_highlight_candidate` require stronger reaction/crowd than the current `1:20` row has?
+- Manual validation:
+  - `1:10:57` and `1:17:43` are valid points but not long/important rallies
+  - both are after point end, with loudness boosted by referee/umpire speech
+  - tuning implication: umpire/referee speech should not upgrade a highlight candidate without stronger rally/reaction/crowd
+- Tightened scanner result:
+  - `strong_audio_highlight_candidate` requires long rally (`rallySeconds >= 5`) plus strong reaction/crowd/player signal
+  - ordinary valid points stay low priority
+  - latest rerun has no uncovered strong/possible highlight candidates
+  - top rows are covered known moments or weak/low-priority uncovered context
+
+Manual validation queue:
+
+- Latest stricter uncovered-audio command:
+  - `node backend/scripts/audit-v2-uncovered-audio-candidates.mjs /tmp/media-analysis-v2-pre-score-baseline-issues-run/media_analysis_v2/result.json --limit=20 --min-review=0.28 --min-distance=20`
+- These are not LLM-confirmable yet because most have no scoreboard frames; validate against video manually:
+  - `1:10:57`
+  - `11:33`
+  - `1:04:20` (`Deuce`)
+  - `39:27`
+  - `1:12:53`
+  - `1:17:37`
+- If manual review marks any as real missed moments, next step is to add a temporary packet path for arbitrary audio-map timecodes so we can sample frames around that time and adjudicate them like normal candidates.
+
+Manual validation result:
+
+- `1:12:21`: recap/slow-motion tail, not live point; next point starts around `1:12:48`
+- `1:17:43`: end of quick basic point, not a strong rally
+- `27:40`: end of quick point
+- `28:44`: end of point / small rally
+- `5:40`: end of first game / end of point
+- `15:37`: just after point end
+- `1:04:20`: between point end and next point start
+- Tuning implication:
+  - do not treat high `rallyTextureScore` alone as a missed-moment signal
+  - require stronger reaction/crowd, score-change evidence, or transcript result language before promotion
+  - otherwise classify as boundary/tail/manual-review, not probable missed moment
+- Implemented in `backend/scripts/audit-v2-uncovered-audio-candidates.mjs`:
+  - `rally_texture` alone => `boundary_or_tail_helper`
+  - transcript score/result cue without strong reaction/crowd or visible scoreboard => no promotion
+  - visible scoreboard plus strong reaction/crowd or score/result text => `needs_scoreboard_confirmation`
+  - strong reaction/crowd plus action transcript => `manual_review_audio_transcript`
+  - commentary-dominant rows remain `manual_review_commentary_or_recap_risk`
+
+Transcript validation:
+
+- Helper:
+  - `backend/scripts/audit-v2-transcript-validation.mjs`
+- Latest command:
+  - `node backend/scripts/audit-v2-transcript-validation.mjs /tmp/media-analysis-v2-pre-score-baseline-issues-run/media_analysis_v2/result.json --times=1:12:21,1:17:43,27:40,28:44,5:40,15:37,1:04:20 --window=25`
+- Conclusion:
+  - transcript is useful context but not primary truth
+  - timing can drift around point tails and next-point setup
+  - noisy ASR can create fake score/action cues
+  - transcript cues should not promote a candidate unless paired with strong reaction/crowd or visual scoreboard evidence
 
 ## Current Baseline
 
@@ -509,3 +855,94 @@ Edge cases to keep visible:
 ## Working Hypothesis
 
 The next accuracy gain should come from better event truth and better temporal boundaries, not from more downstream ranking or agent-format abstractions. Reliability metadata is sufficient for now; richer chaining should wait until more raw signals are integrated.
+
+## Stop Point - Audio-First Audit Session
+
+Completed in this session:
+
+- Added rollup-earlier anchor mode to packet generation:
+  - `--anchor-mode=rollup-earlier`
+  - uses `audio.rollup.primaryAnchorTime` only when it is earlier than the raw audio peak
+  - prevents positive-delta drift, e.g. `candidate_window_42` does not move into `candidate_window_43`
+- Confirmed rollup-earlier anchor did not regress known shifted rows:
+  - `candidate_window_43`, `candidate_window_40`, `candidate_window_14`, `candidate_window_22`, `candidate_window_80`
+- Validated the only confirmed audio-first missed score event in this match:
+  - `candidate_window_89` at `1:19:40`
+  - LLM result: `point_won`, winner `Alcaraz`, live action
+  - scoreboard transition: Alcaraz point score `30 -> 40`
+- Added/tuned audit scripts:
+  - `backend/scripts/audit-v2-uncovered-audio-candidates.mjs`
+  - `backend/scripts/audit-v2-transcript-validation.mjs`
+  - `backend/scripts/audit-v2-promotion-tiers.mjs`
+  - `backend/scripts/audit-v2-audio-highlight-candidates.mjs`
+- Manual validation showed:
+  - high `rallyTextureScore` alone often marks point tails, ordinary short points, recap/slow-motion tails, or between-point context
+  - transcript can be accurate but often describes the result after the actual action
+  - transcript is support only, not primary promotion evidence
+  - referee/umpire speech can inflate audio scores after ordinary points
+- Tuned rules:
+  - rally-only => boundary/tail or weak texture
+  - transcript-only => support only
+  - ordinary valid point + weak reaction => low priority
+  - long rally + strong reaction/crowd/player signal => highlight candidate
+  - visible scoreboard + LLM score transition => confirmed score moment
+
+Current conclusions for this match:
+
+- Confirmed future promotion candidate:
+  - `candidate_window_89`
+- Confirmed existing-event validation rows:
+  - `candidate_window_80`, `candidate_window_43`, `candidate_window_40`, `candidate_window_14`, `candidate_window_22`
+- No uncovered strong/possible audio highlight candidates remain after stricter importance tuning.
+- The scanner now mostly classifies unselected raw audio as:
+  - `weak_rally_texture`
+  - `low_priority_audio_context`
+  - `boundary_or_tail_helper`
+  - `manual_review_commentary_or_recap_risk`
+
+Important artifacts:
+
+- Latest broad packets:
+  - `/tmp/v2-candidate-packets-pre-score-rollup-earlier-audio-first.json`
+- Rollup-earlier packet file:
+  - `/tmp/v2-candidate-packets-rollup-earlier-anchor.json`
+- Candidate 89 adjudication:
+  - `/tmp/v2-candidate-89-rollup-earlier-anchor-adjudication.json`
+- Shifted known-candidate adjudication:
+  - `/tmp/v2-known-shifted-rollup-earlier-adjudication.json`
+  - `/tmp/v2-candidate-80-rollup-earlier-anchor-adjudication.json`
+
+Commands to resume:
+
+- Audio-first packet triage:
+  - `node backend/scripts/audit-v2-audio-first-candidates.mjs /tmp/v2-candidate-packets-pre-score-rollup-earlier-audio-first.json --limit=100`
+- Promotion tier report:
+  - `node backend/scripts/audit-v2-promotion-tiers.mjs /tmp/v2-candidate-packets-pre-score-rollup-earlier-audio-first.json --adjudication=/tmp/v2-candidate-89-rollup-earlier-anchor-adjudication.json --adjudication=/tmp/v2-known-shifted-rollup-earlier-adjudication.json --adjudication=/tmp/v2-candidate-80-rollup-earlier-anchor-adjudication.json --limit=100`
+- Raw audio highlight scan:
+  - `node backend/scripts/audit-v2-audio-highlight-candidates.mjs /tmp/media-analysis-v2-pre-score-baseline-issues-run/media_analysis_v2/result.json --limit=50 --min-score=0.24 --cluster-gap=4`
+
+Next recommended work:
+
+1. Run the same audit suite on another match/result before production promotion.
+2. If rules generalize, wire audit-only tier output into a saved report artifact.
+3. Only then consider promoting `confirmed_scoreboard_transition` rows with no existing event, starting with `candidate_window_89`, behind a gate.
+4. Add regression tests for the manually validated cases:
+   - rally texture alone is not a missed moment
+   - referee/umpire loudness after a point does not create highlight candidate
+   - transcript result phrase is support, not anchor truth
+   - rollup-earlier anchor avoids positive-delta drift
+
+Unfinished aspects to tackle later:
+
+- Transcript back-anchor logic:
+  - result phrases like `good service hold` should confirm context, but anchor should shift back to audio/scoreboard point end
+- Arbitrary timecode packet generation:
+  - needed if manual review finds raw audio-map moments that are not candidate windows but should be LLM/scoreboard adjudicated
+- Full V2 integration:
+  - current work is audit-only; no production event mutation yet
+- Cross-match validation:
+  - current thresholds are tuned on one reference match and may overfit
+- Broader visual search:
+  - some real moments may still lack readable selected scoreboard frames
+- Regression test coverage:
+  - new audit rules are not yet codified in backend tests
