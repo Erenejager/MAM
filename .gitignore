@@ -3,3 +3,10 @@ dist/
 *.local
 .superpowers/
 .worktrees/
+
+# Local tooling artifacts — never commit
+.playwright-mcp/
+screenshots/
+/*.png
+__pycache__/
+.codex

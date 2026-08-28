@@ -8,7 +8,18 @@
       "Bash(\"/c/Users/agharian/AppData/Local/Programs/Python/Python313/python.exe\" \"C:/Users/agharian/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"media library grid card thumbnail video player\" --domain ux -n 5 2>&1)",
       "Bash(\"/c/Users/agharian/AppData/Local/Programs/Python/Python313/python.exe\" \"C:/Users/agharian/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"drag drop upload file dashboard sidebar panel\" --domain ux -n 8 2>&1)",
       "Bash(cmd /c \"git add .planning/ design-system/ .claude/ && git status\")",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npm test:*)",
+      "Bash(npm run:*)",
+      "Bash(git commit -m 'feat\\(ocr\\): propagate Gemini importance through KeyMoment:*)",
+      "Bash(grep -r \"\\\\.sport\\\\|\\\\.players\\\\|\\\\.competition\" src/lib/ocr/ src/__tests__/*.test.ts --include=\"*.ts\")",
+      "Bash(python3 -m pytest --version)",
+      "Bash(python3 -m py_compile tools/scoreboard-detector/tests/conftest.py)",
+      "Bash(python3 *)"
     ]
-  }
+  },
+  "disabledMcpjsonServers": [
+    "shadcn"
+  ]
 }
