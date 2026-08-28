@@ -24,8 +24,11 @@ vi.mock('../lib/ocr/audio-peaks.js', () => ({
 }));
 
 vi.mock('node:child_process', () => ({
-  execFile: vi.fn((_cmd: string, _args: string[], cb: Function) => {
-    cb(null, '', '');
+  // execFile is called as (cmd, args, options, cb) via promisify, so the
+  // callback is always the final argument rather than the third.
+  execFile: vi.fn((...args: unknown[]) => {
+    const cb = args[args.length - 1];
+    if (typeof cb === 'function') (cb as (...a: unknown[]) => void)(null, '', '');
   }),
 }));
 

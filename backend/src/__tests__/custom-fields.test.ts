@@ -1,61 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Fastify, { FastifyInstance } from 'fastify';
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import * as schema from '../db/schema.js';
 
 // Mock the db module before importing routes
-vi.mock('../db/index.js', () => {
-  // Create in-memory SQLite with full schema
-  const sqlite = new Database(':memory:');
-  sqlite.pragma('journal_mode = WAL');
-  sqlite.pragma('foreign_keys = ON');
-
-  // Create tables
-  sqlite.exec(`
-    CREATE TABLE IF NOT EXISTS assets (
-      id TEXT PRIMARY KEY,
-      original_filename TEXT NOT NULL,
-      filepath TEXT NOT NULL,
-      file_size INTEGER,
-      status TEXT DEFAULT 'ingesting',
-      file_hash TEXT UNIQUE,
-      duration_seconds REAL,
-      width INTEGER,
-      height INTEGER,
-      codec TEXT,
-      bitrate INTEGER,
-      frame_rate REAL,
-      metadata_status TEXT DEFAULT 'pending',
-      thumbnail_path TEXT,
-      thumbnail_status TEXT DEFAULT 'pending',
-      transcript_path TEXT,
-      transcript_text TEXT,
-      transcription_status TEXT DEFAULT 'pending',
-      transcription_error TEXT,
-      search_index_status TEXT DEFAULT 'pending',
-      title TEXT,
-      description TEXT,
-      tags TEXT DEFAULT '[]',
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS custom_fields (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      field_type TEXT DEFAULT 'text',
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS asset_custom_values (
-      asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
-      field_id TEXT NOT NULL REFERENCES custom_fields(id) ON DELETE CASCADE,
-      value TEXT,
-      PRIMARY KEY (asset_id, field_id)
-    );
-  `);
-
-  const db = drizzle(sqlite, { schema });
-  return { db, sqlite };
+vi.mock('../db/index.js', async () => {
+  const { createTestDb } = await import('./helpers/test-db.js');
+  return createTestDb();
 });
 
 // Mock fs/promises.rm
